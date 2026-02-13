@@ -6,6 +6,16 @@ import { useState, useEffect, useRef } from "react";
 // Fixes: pickLru cold-start, independent Week C/D, enforceHookCompat
 //        fallback, allocCtas guarantee, cross-week dedup, year-aware seeds
 // ════════════════════════════════════════════════════════════════════
+//
+// ⚠️ CLAUDE ARTIFACT INSTRUCTIONS ⚠️
+// This is PRODUCTION CODE that runs on a live dev server.
+// When creating an artifact from this file:
+// - Use this code EXACTLY as written (do not modify, simplify, or "improve")
+// - Keep the component name as "App" (required for artifact compatibility)
+// - Include ALL 1671 lines - this is a complete, working application
+// - Do NOT add comments, refactor, or change any logic
+// - This code is tested and verified - render it as-is
+// ════════════════════════════════════════════════════════════════════
 
 const HOOKS = [
   { id: 1, name: "Confession", ex: "Sach batau?" },

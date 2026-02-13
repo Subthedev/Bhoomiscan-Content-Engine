@@ -1,0 +1,18 @@
+═══════════════════════════════════════════════════════════════
+📋 COPY-PASTE THIS PROMPT WHEN UPLOADING TO CLAUDE
+═══════════════════════════════════════════════════════════════
+
+I'm uploading bhoomiscan-engine.jsx - a complete, production-ready React component.
+
+This is WORKING CODE from my dev server. Create a React artifact that renders this EXACT code without ANY modifications.
+
+Requirements:
+✓ Use the code exactly as written (all 1671 lines)
+✓ Do NOT simplify, refactor, or "improve" anything
+✓ Do NOT add comments or change logic
+✓ Keep component name as "App"
+✓ This is tested production code - render as-is
+
+Just create the artifact with this exact code. No changes needed.
+
+═══════════════════════════════════════════════════════════════
