@@ -159,8 +159,30 @@ const SEASONAL_FACTS = {
     ],
 };
 
+// FIX 9: NRI evergreen stats supplement for Prompt 3 research block
+const NRI_KNOWLEDGE_SUPPLEMENT = `
+
+<!-- FIX 9: NRI knowledge supplement added -->
+<nri_knowledge_supplement>
+NRI EVERGREEN STATS (use when weekly research lacks NRI-specific findings):
+These are verified stats from the Target Audience Guide and Brand Guide. Use them as proof points when weekly research data doesn't cover NRI angles.
+
+1. "82% NRIs report trust deficit as their biggest problem in Indian real estate" — use for S5 (scam prevention)
+2. "75% NRIs prefer investing in their hometown" — use as emotional anchor
+3. "NRI share of Indian real estate has grown from 7% to 17-20%" — use for market context
+4. "FEMA prohibits NRIs from purchasing agricultural/farm land — only residential plots allowed" — use for S4 (repatriation/legal rules)
+5. "Supreme Court in 2011 invalidated GPA-based ownership transfers — proper registration required" — use for S5 (scam prevention)
+6. Finance Bill 2026: TAN requirement eliminated for resident buyers purchasing from NRIs, effective October 2026 — use for S4
+
+SCAM FRAMEWORK FOR S5: Since no NRI-specific scam case exists in this week's research, use this structure:
+- Open with a domestic fraud case (Gurugram ₹500Cr or Pune ₹600Cr) as the shock stat
+- Pivot with: "Ab socho, NRI ho toh verify kaise karoge 10,000 km door se?"
+- This reframes any domestic fraud as an NRI vulnerability story — the distance makes verification harder, which is the real hook
+</nri_knowledge_supplement>`;
+
 // ═══ MASTER PROMPT BUILDER v2 — Claude-Optimized XML Architecture ═══
-export function mkP(num, title, audience, cx, r, res, assignments, formats, energy, selfRef, uspPri, uspSec, audCal, compAnglesXml, abTestXml) {
+// hookHintsXml (16th param): optional, injected inside <variation_controls> after </hooks> — used by mkP3 for Fix 11
+export function mkP(num, title, audience, cx, r, res, assignments, formats, energy, selfRef, uspPri, uspSec, audCal, compAnglesXml, abTestXml, hookHintsXml) {
     const se = r.se, bk = `b${num}`;
     const gold = pickGoldRef(audience);
 
@@ -197,6 +219,16 @@ STYLE DNA:
 <brand_rules>
 ${RULES}
 </brand_rules>
+
+<!-- FIX 1: Research preprocessing added -->
+<research_preprocessing>
+BEFORE using any research finding in a script, mentally preprocess it:
+1. EXTRACT only: the core stat (number + unit), the location, the date, and a one-line plain-language summary
+2. IGNORE: URLs, filenames, UUIDs, formatting artifacts, table headers, broken text fragments
+3. VERIFY: If a stat appears garbled or contradictory (e.g., "500\\ncrore" or "43 l" without context), reconstruct the most logical interpretation OR skip it entirely
+4. NEVER paste raw research fragments into script text. Always convert to natural spoken Hinglish first.
+5. If a finding is marked usable="false", do NOT use it in any script — treat it as context-only background
+</research_preprocessing>
 </system>
 
 <task>${title}</task>
@@ -218,15 +250,43 @@ ${researchBlock}
 ${assignments}
 </script_slots>
 
-
 <formats>${formats.map((f, i) => `S${i + 1}:${f}`).join(" | ")}</formats>
-${abTestXml || '<ab_test>Generate 1 alt hook for Script 1 (different archetype) as backup.</ab_test>'}
+${abTestXml || `<!-- FIX 3: AB test evaluation criteria added -->
+<ab_test>
+Generate 1 alt hook for Script 1 using a different archetype.
+EVALUATION CONTEXT: The alt hook will be tested against the primary hook for scroll-stop rate (first 1.5 seconds). The winning hook is the one more likely to make a viewer STOP scrolling and watch the full reel.
+ALT HOOK CRITERIA:
+- Must use a DIFFERENT archetype from the primary (specified in variation_controls)
+- Must still fit the script's assigned topic, energy level, and audience
+- Must be swappable without rewriting the rest of the script (the engage section and CTA remain the same)
+OUTPUT: Present the alt hook as a single line labeled "ALT HOOK S1:" after the main script output, with the archetype name in parentheses.
+</ab_test>`}
 </assignments>
+
+<!-- FIX 2: Format definitions added -->
+<format_definitions>
+FORMAT STRUCTURES (how the script's body is organized — independent of hook archetype):
+
+TALKING HEAD: Direct-to-camera monologue. Speaker shares knowledge conversationally. Most flexible format. 2-4 main points delivered in sequence with conversational breaks. Default format when no special structure is needed.
+
+MYTH BUSTER: Open with a widely-held belief or common practice stated as fact. Then disprove it with data or logic. Structure: State myth (1-2 lines) → "Lekin sach yeh hai..." or "Galat." → Correct information with proof → What to do instead. The "bust" moment should land at the 40-50% mark of the script.
+
+STORY-BASED: Open with a third-person mini-story (real or anonymized). Structure: Setup character + situation (2-3 lines) → What went wrong or right (2-3 lines) → Lesson extracted → How viewer can apply it. Story should be maximum 40% of script; the lesson and application are the payload.
+
+NUMBER SHOCK: Lead with a single shocking statistic. Let it breathe (short sentence, pause). Then unpack what the number means in practical terms. Structure: Stat drop → "Ruko, iska matlab samjho" → Real-world implication → What viewer should do. The number must be spoken in Hindi words for emphasis when under 100 ("saat guna"), numerals when data-context ("500 crore").
+
+RAPID FIRE: 3-5 quick-hit points delivered fast. Each point is 1-2 sentences maximum. No deep explanation per point. Structure: Setup frame ("Teen cheezein yaad rakho") → Point 1 → Point 2 → Point 3 → Punchy summary → CTA. Energy stays consistently high throughout — no dips.
+
+Q&A RESPONSE: Frame as answering real audience questions. Structure: Acknowledge questions come in ("Bahut log poochte hain...") → Pick 2-3 questions → Answer each briefly (2-3 sentences max) → Invite more questions in close. Tone is warmer and more inclusive than other formats.
+
+PREDICTION/FUTURE: Frame as forward-looking analysis. Structure: "Aage kya hone wala hai?" setup → 2-3 predictions with supporting data → What viewer should do NOW to prepare → CTA as preparation step. Avoid guaranteeing predictions — use "data yeh keh raha hai" or "trend yeh hai" framing.
+</format_definitions>
 
 <variation_controls>
 <hooks>
 ${hS(r.hB[bk])}
 </hooks>
+${hookHintsXml || ''}
 <ctas>
 ${cS(r.cB[bk])}
 </ctas>
@@ -253,7 +313,7 @@ For EACH of the 5 scripts, follow these steps IN ORDER:
 4. BUILD the engage section around the assigned pain point, weaving the stat naturally as proof.
 5. DELIVER the CTA using the ASSIGNED CTA pattern — make it feel like a friend's suggestion.
 6. CHECK: Does this sound like something you'd overhear at a chai stall? If it sounds like a blog post, rewrite it.
-7. COUNT words — must be 130-145. If over, cut filler. If under, add a dialogue snippet or "main bhi" moment.
+7. COUNT words — target 130-145. Count EVERY word including Hindi words, English words, and single-word interjections (bhai, haan, nahi each = 1 word). Quoted dialogue words count too. If count exceeds 145: first cut filler phrases ('basically', 'actually', 'toh dekho'), then shorten one example, then remove one conversational aside. If count is below 130: add a dialogue snippet, a 'main bhi' moment, or one more detail to a tip. RECOUNT after every edit. The final count must be 130-145 — scripts at 146+ words will be rejected.
 8. VERIFY the 3-1-3 rhythm: 2-3 medium sentences, then 1 short punch, then 2-3 medium again.
 </thinking_process>
 
@@ -271,6 +331,8 @@ For EACH of the 5 scripts, output:
 2. English caption (1-2 SEO sentences) + max 8 hashtags with #BhoomiScan
 3. Word count must be 130-145 — COUNT CAREFULLY
 4. Structure: Hook → Engage → CTA for Instagram/Facebook reels
+<!-- FIX 10: Word count hard gate added -->
+WORD COUNT IS A HARD GATE: If any script is outside 130-145 words, rewrite it before outputting. Do not output a script that violates this range.
 </output_format>
 
 <variation_log_format>
@@ -292,8 +354,12 @@ ${QGATE}
 
 export function mkP1(cx, r, res) {
     const a = r.ba.map(i => ANG.buyer[i]);
+    // FIX 4: Research gap handling for S1 when assigned "Flood zone check guide"
+    const s1GapNote = (a[0] || '').toLowerCase().includes('flood zone')
+        ? `\n<!-- FIX 4: S1 research gap handling added -->\n<research_gap_handling>\nS1 NOTE: The research data does not contain flood-zone-specific stats. For this script:\n- Use the general buyer insight that 84% of deals close offline due to trust deficit (from Audience Guide Section 6) as the proof-point bridge: flood zone risk is one MORE reason to verify before buying\n- Reference Google Maps flood zone check as a practical zero-cost step (this is general knowledge, not a research stat — frame it as a tip, not a cited finding)\n- Do NOT fabricate flood-zone statistics. If a stat is needed for the hook, use the "66% civil cases = property disputes" stat and pivot to flood zone as one of the underappreciated dispute causes\n<!-- OPTION B FALLBACK: If flood zone content feels too thin even with this guidance, swap S1 topic to "Encumbrance certificate guide" which has direct research support from fraud findings (Gurugram duplicate registry case, Pune ULC forgery case) -->\n</research_gap_handling>`
+        : '';
     return mkP(1, "GENERATE 5 BUYER-FOCUSED BHOOMISCAN REEL SCRIPTS", "buyer", cx, r, res,
-        `S1: EDUCATE — ${a[0] || "Document/process explainer"}\nS2: AGITATE — ${a[1] || "Scam/fraud awareness"}\nS3: EDUCATE — ${a[2] || "Step-by-step checklist"}\nS4: EMPOWER — ${a[3] || "Smart buying strategy"}\nS5: AGITATE — ${a[4] || "Common buyer mistake"}`,
+        `S1: EDUCATE — ${a[0] || "Document/process explainer"}${s1GapNote}\nS2: AGITATE — ${a[1] || "Scam/fraud awareness"}\nS3: EDUCATE — ${a[2] || "Step-by-step checklist"}\nS4: EMPOWER — ${a[3] || "Smart buying strategy"}\nS5: AGITATE — ${a[4] || "Common buyer mistake"}`,
         FMT.b1, NRG.b1, "S2 and S4 only", USP_B.b1, USP_SEC.b1,
         `<buyer_profile>
 Buyer (28-45, Tier 2/3, risk-averse) | Persona: "Protective Big Brother" — calm, educational
@@ -305,7 +371,23 @@ Trust triggers: verified, genuine, safe, checked | Fear triggers: fraud, fake, c
 
 export function mkP2(cx, r, res) {
     const a = r.sa.map(i => ANG.seller[i]);
-    return mkP(2, "GENERATE 5 SELLER-FOCUSED BHOOMISCAN REEL SCRIPTS", "seller", cx, r, res,
+    // FIX 5: S3 hook override — Situational (id=5) doesn't fit "Handling advance payments"
+    // Common Mistake (id=7) is the natural fit: "Ek galti hai jo 80% sellers karte hain..."
+    // Verify uniqueness: after swap, all 5 b2 hooks must remain distinct
+    const r2 = (() => {
+        if (r.hB.b2[2] === 5 && (a[2] || '').toLowerCase().includes('advance')) {
+            const newB2 = [...r.hB.b2];
+            newB2[2] = 7; // Situational → Common Mistake
+            // Only apply if Common Mistake isn't already used in another b2 slot
+            const otherSlots = [newB2[0], newB2[1], newB2[3], newB2[4]];
+            if (!otherSlots.includes(7)) {
+                return { ...r, hB: { ...r.hB, b2: newB2 } };
+            }
+        }
+        return r;
+    })();
+    // <!-- FIX 5: S3 hook changed from Situational to Common Mistake when topic is advance payments -->
+    return mkP(2, "GENERATE 5 SELLER-FOCUSED BHOOMISCAN REEL SCRIPTS", "seller", cx, r2, res,
         `S1: AGITATE — ${a[0] || "Why property not selling"}\nS2: EDUCATE — ${a[1] || "Listing optimization/pricing"}\nS3: EMPOWER — ${a[2] || "Commission savings/direct selling"}\nS4: EDUCATE — ${a[3] || "Legal document awareness"}\nS5: AGITATE — ${a[4] || "Cost of waiting"}`,
         FMT.b2, NRG.b2, "S1 and S3 only", USP_B.b2, USP_SEC.b2,
         `<seller_profile>
@@ -318,7 +400,16 @@ Trust triggers: free, direct, control, no spam | Fear triggers: commission, brok
 
 export function mkP3(cx, r, res) {
     const aa = r.aa.map(i => ANG.agent[i]), na = r.na.map(i => ANG.nri[i]);
-    return mkP(3, "GENERATE 5 SCRIPTS: 3 AGENT + 2 NRI", "mixed", cx, r, res,
+    // FIX 9: Append NRI evergreen stats supplement to research data
+    const resWithNri = (res || '') + NRI_KNOWLEDGE_SUPPLEMENT;
+    // FIX 11: S4 Bold Claim hook hint — repatriation needs expectation-gap framing, not excitement
+    const s4HookHint = `<!-- FIX 11: S4 Bold Claim hook hint added -->
+<hook_hint script="S4">
+The Bold Claim for repatriation should NOT try to make FEMA rules exciting. Instead, the surprise should come from what NRIs DON'T know:
+Example angle: "NRI ho aur sochte ho property bech ke paisa bahar bhej doge? Itna simple nahi hai bhai."
+The "bold claim" is the gap between expectation and reality — most NRIs assume selling = money transferred. The repatriation process, TDS obligations, and CA certificate requirements are the surprise. Lead with the assumption, then bust it.
+</hook_hint>`;
+    return mkP(3, "GENERATE 5 SCRIPTS: 3 AGENT + 2 NRI", "mixed", cx, r, resWithNri,
         `S1 (AGENT EMPOWER): ${aa[0] || "Business growth"}\nS2 (AGENT AGITATE): ${aa[1] || "Digital disruption FOMO"}\nS3 (AGENT EDUCATE): ${aa[2] || "Lead gen/closing"}\nS4 (NRI EDUCATE): ${na[0] || "NRI rules/FEMA"}\nS5 (NRI EMPOWER): ${na[1] || "Hometown investment"}`,
         FMT.b3, NRG.b3, "S2 only", USP_B.b3, USP_SEC.b3,
         `<agent_profile>
@@ -338,18 +429,50 @@ Use "family" and "ghar" as emotional anchors, not "investment" and "returns"
 <competitive_angle>Weave into S4 or S5: "${COMP[COMP.length - 1]}"</competitive_angle>
 </nri_profile>`,
         '',
-        '<ab_test>Generate 1 alt hook for Script 1 (different archetype) AND 1 alt hook for Script 5 (NRI scam prevention — different emotional angle) as backups.</ab_test>');
+        // FIX 3: Updated ab_test with evaluation criteria — dual alt hooks for S1 and S5
+        `<!-- FIX 3: AB test evaluation criteria added -->
+<ab_test>
+Generate 1 alt hook for Script 1 using a different archetype AND 1 alt hook for Script 5 (NRI scam prevention — different emotional angle).
+EVALUATION CONTEXT: The alt hook will be tested against the primary hook for scroll-stop rate (first 1.5 seconds). The winning hook is the one more likely to make a viewer STOP scrolling and watch the full reel.
+ALT HOOK CRITERIA:
+- Must use a DIFFERENT archetype from the primary (specified in variation_controls)
+- Must still fit the script's assigned topic, energy level, and audience
+- Must be swappable without rewriting the rest of the script (the engage section and CTA remain the same)
+OUTPUT: Present alt hooks as single lines labeled "ALT HOOK S1:" and "ALT HOOK S5:" after their respective script outputs, with archetype names in parentheses.
+</ab_test>`,
+        // FIX 11: Pass hook hint for S4 into variation_controls
+        s4HookHint);
 }
 
 export function mkP4(cx, r, res, shockStat) {
     const se = r.se;
     const hasResearch = !!res;
-    const shockLine = shockStat
-        ? `USE THIS EXACT STAT AS SHOCK HOOK: "${shockStat}"`
-        : (hasResearch ? "Fresh stat/news as shock hook" : "Strongest stat from Target Audience Guide stat library as shock hook");
+
+    // FIX 6: Detect garbled shockStat (table fragments contain multiple ₹ or pillar keywords)
+    const isGarbled = shockStat && (
+        (shockStat.match(/₹/g) || []).length > 1 ||
+        /\b(BUYER|SELLER|AGITATE|EDUCATE|EMPOWER)\b/.test(shockStat) ||
+        shockStat.length > 120
+    );
+
+    let shockLine;
+    if (isGarbled) {
+        // FIX 6: Replace garbled stat with clean 3-option structured directive
+        shockLine = `<!-- FIX 6: Garbled stat replaced with structured directive -->
+FRAUD DATA SHOCK — Use ONE of these stats as the shock hook:
+  STAT OPTION A: Gurugram 32nd Avenue — ₹500 crore fraud, 1 commercial floor sold to 25 different buyers, ~1000 investors cheated
+  STAT OPTION B: Pune Mohammadwadi — ₹600 crore land fraud, forged Urban Land Ceiling documents for 28 acres
+  STAT OPTION C: Navi Mumbai — ₹69.47 crore, 152 hectares of forest land illegally mutated
+  Pick the ONE stat that creates the strongest Rhetorical Challenge hook ("Guess karo..."). Do not combine all three — pick one, let it breathe.`;
+    } else {
+        shockLine = shockStat
+            ? `USE THIS EXACT STAT AS SHOCK HOOK: "${shockStat}"`
+            : (hasResearch ? "Fresh stat/news as shock hook" : "Strongest stat from Target Audience Guide stat library as shock hook");
+    }
+
     const freshness = hasResearch
         ? `<freshness_rules>
-S1 MUST use this week's research as shock hook${shockStat ? ` — SPECIFIC STAT: "${shockStat}"` : ""}
+S1 MUST use this week's research as shock hook${shockStat && !isGarbled ? ` — SPECIFIC STAT: "${shockStat}"` : ""}
 S2 MUST be forward-looking backed by research trends
 S4 MUST reference festivals
 S5 MUST drive comments/community engagement
@@ -367,15 +490,42 @@ NOTE: No fresh research this week. Compensate by making S1 and S2 extra compelli
         : '';
     const p4CompXml = `<competitive_angles>\n  <angle audience="BUYER" script="S2">Weave naturally: "${COMP[(r.comp + 1) % COMP.length]}"</angle>\n  <angle audience="SELLER" script="S4">Weave naturally: "${COMP[(r.comp + 2) % COMP.length]}"</angle>\n  <angle audience="AGENT" script="S5">Weave naturally: "${COMP[(r.comp + 4) % COMP.length]}"</angle>\n</competitive_angles>`;
     return mkP(4, "GENERATE 5: TRENDING + DATA-BACKED + COMMUNITY", "trending", cx, r, res,
-        `S1 (DATA): ${shockLine}\nS2 (PREDICTION): Forward-looking trends\nS3 (CONNECT Q&A): "Your questions answered" format — community engagement\nS4 (SEASONAL): ${se.f.join("/")} — "${se.h}"\nS5 (CONNECT): Relatable community story OR audience poll/debate topic — 2nd CONNECT reel of the week`,
+        // FIX 7: S5 simplified to single clear debate directive — removes "community story OR" ambiguity
+        `S1 (DATA): ${shockLine}\nS2 (PREDICTION): Forward-looking trends\nS3 (CONNECT Q&A): "Your questions answered" format — community engagement\nS4 (SEASONAL): ${se.f.join("/")} — "${se.h}"\nS5 (CONNECT): Community debate — pose a polarizing-but-friendly question that agents/sellers have strong opinions about. Format: RAPID FIRE (present 2 opposing viewpoints in quick-hit style, then ask audience to pick a side).`,
         FMT.b4, NRG.b4, "S3 only", USP_B.b4, USP_SEC.b4,
+        // FIX 8: Street-Smart Friend persona calibration added to trending_profile
         `<trending_profile>
 Audience mapping: S1=ALL (data shock), S2=BUYER (forward prediction), S3=ALL (community Q&A), S4=SELLER (seasonal urgency), S5=AGENT (community story)
 Content Pillars: S1=TRENDING, S2=TRENDING, S3=CONNECT, S4=EDUCATE/SEASONAL, S5=CONNECT (2 CONNECT reels required per week)
 ${freshness}
+<!-- FIX 8: Street-Smart Friend persona calibration added -->
+<trending_persona>
+"STREET-SMART FRIEND" PERSONA CALIBRATION:
+- This persona speaks to ALL audiences simultaneously — buyers, sellers, agents, NRIs
+- Language ratio: 60% Hindi / 40% English (midpoint between buyer 65/35 and agent 55/45)
+- Energy baseline: Higher than educational scripts, slightly lower than agent FOMO scripts
+- Signature moves:
+  * Opens with data or news, not advice ("Yeh number suno" not "Yeh karo")
+  * Connects dots between news and viewer's life ("Iska matlab tumhare liye kya hai?")
+  * Uses "hum sab" (all of us) more than persona-specific "hum" — broader inclusion
+  * Ends with opinion invitation, not instruction ("Tumhe kya lagta hai?")
+- Think of this voice as: A friend who reads the news AND understands real estate, sharing what he found over chai. Not a reporter. Not an analyst. A sharp friend.
+- Trust triggers: data, numbers, news source references (unnamed), trend language
+- Fear triggers: "peeche reh jaoge", "yeh badlav aa raha hai", "tayyar ho?"
+</trending_persona>
 </trending_profile>${seasonalXml}`,
         p4CompXml,
-        '<ab_test>Generate 1 alt hook for Script 1 (different archetype) AND 1 alt hook for Script 4 (seasonal — different Budget/festival framing) as backups.</ab_test>');
+        // FIX 3: Updated ab_test with evaluation criteria — dual alt hooks for S1 and S4
+        `<!-- FIX 3: AB test evaluation criteria added -->
+<ab_test>
+Generate 1 alt hook for Script 1 using a different archetype AND 1 alt hook for Script 4 (seasonal — different Budget/festival framing).
+EVALUATION CONTEXT: The alt hook will be tested against the primary hook for scroll-stop rate (first 1.5 seconds). The winning hook is the one more likely to make a viewer STOP scrolling and watch the full reel.
+ALT HOOK CRITERIA:
+- Must use a DIFFERENT archetype from the primary (specified in variation_controls)
+- Must still fit the script's assigned topic, energy level, and audience
+- Must be swappable without rewriting the rest of the script (the engage section and CTA remain the same)
+OUTPUT: Present alt hooks as single lines labeled "ALT HOOK S1:" and "ALT HOOK S4:" after their respective script outputs, with archetype names in parentheses.
+</ab_test>`);
 }
 
 export function mkClean(cx, r) {
