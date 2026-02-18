@@ -628,7 +628,7 @@ PLATFORM ACCURACY:
 
 SCRIPT QUALITY:
 - Every script MUST follow the 6-beat energy arc
-- Every script MUST have 130-150 words (HARD requirement)
+- Every script MUST have 130-145 words (HARD requirement)
 - Every script MUST open with a hook that stops scrolling in 1.5 seconds
 - Every script MUST sound like a man talking at a chai tapri, NOT a teleprompter
 - Every batch of 5 scripts MUST use 5 different hook archetypes
@@ -644,7 +644,7 @@ OUTPUT FORMAT (for every script):
 2. Blank line
 3. "📌 SCRIPT:" label
 4. Blank line
-5. Script body (130-150 words, paragraph breaks, ready for HeyGen)
+5. Script body (130-145 words, paragraph breaks, ready for HeyGen)
 6. Separator line
 7. "📌 CAPTION & HASHTAGS:" label
 8. Blank line
@@ -723,7 +723,7 @@ QUALITY GATE (Run mentally before outputting each script)
 
 Before finalizing each script, verify:
 [ ] Hook stops scrolling in 1.5 seconds? Different archetype from others in batch?
-[ ] 130-150 words? (COUNT CAREFULLY)
+[ ] 130-145 words? (COUNT CAREFULLY)
 [ ] Sounds like chai tapri conversation, not AI text?
 [ ] 6-beat energy arc followed? Mid-script energy booster present?
 [ ] "tum/tumhare" pronouns only? "bhai" used 2-4 times?
@@ -786,7 +786,7 @@ SEASONAL/TIMELY HOOK (if applicable): [e.g., "Monsoon site visit warning", "Budg
 SCRIPT OUTPUT FORMAT (for each of 5 scripts):
 1. Just the script — ready to copy-paste into HeyGen. No voice direction, no stage direction, no brackets. Pure spoken words only.
 2. Below the script: Short, punchy English caption (1-2 sentences) that complements the reel and helps SEO. Below the caption: max 8 hashtags including #BhoomiScan.
-3. Script MUST be 130-150 words. Count carefully.
+3. Script MUST be 130-145 words. Count carefully.
 4. Script must hook attention from first line, maintain engagement throughout, and end with a natural CTA optimized for BhoomiScan on Instagram/Facebook reels.
 
 After all 5 scripts, provide a VARIATION LOG showing:
@@ -798,7 +798,7 @@ After the variation log, provide this CLEANUP PROMPT that I can use if any scrip
 CLEANUP PROMPT:
 "Review Script [number] from the Buyer batch. The issue is: [describe what feels off — e.g., 'hook is weak', 'CTA feels forced', 'tone too formal', 'energy flat in middle', 'sounds like AI']. 
 
-Rewrite ONLY the problematic section while keeping the rest intact. Maintain the same hook archetype, CTA pattern, USP focus, and word count (130-150). Apply these specific fixes:
+Rewrite ONLY the problematic section while keeping the rest intact. Maintain the same hook archetype, CTA pattern, USP focus, and word count (130-145). Apply these specific fixes:
 1. If hook is weak: Replace with a stronger version of the SAME archetype — make it impossible to scroll past
 2. If CTA feels forced: Rewire using a different CTA pattern from the 6 options
 3. If tone is off: Add 2-3 more conversational texture elements (energy boosters, affirmation words, colloquialisms)
@@ -850,7 +850,7 @@ SEASONAL/TIMELY HOOK (if applicable): [e.g., "Financial year end — sell before
 SCRIPT OUTPUT FORMAT (for each of 5 scripts):
 1. Just the script — ready to copy-paste into HeyGen. No voice direction, no stage direction, no brackets. Pure spoken words only.
 2. Below the script: Short, punchy English caption (1-2 sentences) that complements the reel and helps SEO. Below the caption: max 8 hashtags including #BhoomiScan.
-3. Script MUST be 130-150 words. Count carefully.
+3. Script MUST be 130-145 words. Count carefully.
 4. Script must hook attention from first line, maintain engagement throughout, and end with a natural CTA optimized for BhoomiScan on Instagram/Facebook reels.
 
 After all 5 scripts, provide a VARIATION LOG showing:
@@ -862,7 +862,7 @@ After the variation log, provide this CLEANUP PROMPT:
 CLEANUP PROMPT:
 "Review Script [number] from the Seller batch. The issue is: [describe what feels off — e.g., 'hook is weak', 'CTA feels forced', 'tone too preachy', 'energy flat', 'sounds like AI', 'too long/short']. 
 
-Rewrite ONLY the problematic section while keeping the rest intact. Maintain the same hook archetype, CTA pattern, USP focus, and word count (130-150). Apply these specific fixes:
+Rewrite ONLY the problematic section while keeping the rest intact. Maintain the same hook archetype, CTA pattern, USP focus, and word count (130-145). Apply these specific fixes:
 1. If hook is weak: Make the opening impossible to scroll past — use a more provocative version of the SAME archetype
 2. If CTA feels forced: Rewire using a different CTA pattern that flows from the content naturally
 3. If tone is preachy: Replace lecturing lines with inclusive 'hum' language and add empowerment phrases
@@ -895,7 +895,7 @@ MANDATORY VARIATION CONTROLS FOR THIS BATCH:
 - Use 5 DIFFERENT CTA patterns
 - Use 5 DIFFERENT bio link phrasings
 - Use 5 DIFFERENT closing triggers
-- Energy: Script 1 = MEDIUM, Script 2 = HIGH, Script 3 = MEDIUM, Script 4 = MEDIUM, Script 5 = WARM
+- Energy: Script 1 = MEDIUM, Script 2 = HIGH, Script 3 = MEDIUM, Script 4 = WARM, Script 5 = HIGH
 - Self-referential moment: Use in only Script 2
 - USP primary focus: Script 1 = Free Listings, Script 2 = WhatsApp Connect, Script 3 = Free Listings, Script 4 = Verified Properties, Script 5 = Zero Commission
 
@@ -924,7 +924,7 @@ PAIN POINT FOCUS THIS WEEK:
 SCRIPT OUTPUT FORMAT (for each of 5 scripts):
 1. Just the script — ready to copy-paste into HeyGen. Pure spoken words only.
 2. Short punchy English caption + max 8 hashtags including #BhoomiScan.
-3. 130-150 words per script. Count carefully.
+3. 130-145 words per script. Count carefully.
 4. Hook → Engage → CTA optimized for Instagram/Facebook reels.
 
 After all 5 scripts, provide a VARIATION LOG.
@@ -984,7 +984,7 @@ FRESHNESS REQUIREMENTS:
 SCRIPT OUTPUT FORMAT:
 1. Pure spoken script for HeyGen. No directions.
 2. English caption + max 8 hashtags with #BhoomiScan.
-3. 130-150 words per script.
+3. 130-145 words per script.
 4. Hook → Engage → CTA for Instagram/Facebook reels.
 
 After all 5 scripts, provide a VARIATION LOG with additional column "DATA SOURCE" showing where each fresh data point came from.
