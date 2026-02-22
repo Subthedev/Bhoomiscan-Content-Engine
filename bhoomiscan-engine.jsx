@@ -766,14 +766,33 @@ function shuf(arr, seed) {
 
 // FIX 8: Robust script counter — handles all common Claude output formats
 // Matches: "S1", "Script 1", "Script1", "#1", bare "1"-"20" in first table cell
+// Also handles: no leading pipe, tab-separated, mixed formats
 function countScripts(text) {
   if (!text?.trim()) return 0;
-  const rows = text.split('\n').filter(l => l.trim().startsWith('|'));
+  const lines = text.split('\n');
   let count = 0;
-  for (const row of rows) {
-    const cells = row.split('|').map(c => c.trim()).filter(Boolean);
-    if (!cells.length) continue;
-    const first = cells[0];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    let first = '';
+    if (trimmed.startsWith('|')) {
+      // Standard markdown: | S1 | Hook | ...
+      const cells = trimmed.split('|').map(c => c.trim()).filter(Boolean);
+      if (!cells.length) continue;
+      first = cells[0];
+    } else if (trimmed.includes('|')) {
+      // No leading pipe: S1 | Hook | ...
+      const cells = trimmed.split('|').map(c => c.trim()).filter(Boolean);
+      if (!cells.length) continue;
+      first = cells[0];
+    } else if (trimmed.includes('\t')) {
+      // Tab-separated (copied from rendered Claude table): S1\tHook\t...
+      const cells = trimmed.split('\t').map(c => c.trim()).filter(Boolean);
+      if (!cells.length) continue;
+      first = cells[0];
+    } else {
+      continue;
+    }
     // Skip header rows and separator rows (---)
     if (/^-+$/.test(first) || /^script$/i.test(first) || /^#$/i.test(first) || /^sr\.?\s*no\.?$/i.test(first)) continue;
     // Match: "S1", "S 1", "Script 1", "Script1", "#1", or bare "1"-"20"
@@ -2125,24 +2144,34 @@ export default function App() {
               const scriptCount = countScripts(logT);
               const isComplete = scriptCount >= 20;
               const isPartial = scriptCount >= 5 && scriptCount < 20;
+              const isTiny = scriptCount > 0 && scriptCount < 5;
               const isEmpty = scriptCount === 0;
               const hasUnparsedText = logT.trim().length > 0 && isEmpty;
 
-              return <div style={{ marginBottom: 10, padding: "10px 14px", borderRadius: 8, background: isComplete ? "rgba(45,106,79,0.08)" : isPartial ? "rgba(180,64,64,0.08)" : hasUnparsedText ? "rgba(180,140,0,0.08)" : "rgba(139,111,71,0.05)", border: `1.5px solid ${isComplete ? G : isPartial ? "#b44040" : hasUnparsedText ? "#b49000" : BR}` }}>
+              const bgColor = isComplete ? "rgba(45,106,79,0.08)" : (isPartial || isTiny) ? "rgba(180,64,64,0.08)" : hasUnparsedText ? "rgba(180,140,0,0.08)" : "rgba(139,111,71,0.05)";
+              const borderColor = isComplete ? G : (isPartial || isTiny) ? "#b44040" : hasUnparsedText ? "#b49000" : BR;
+              const icon = isComplete ? "✅" : (isPartial || isTiny) ? "⚠️" : hasUnparsedText ? "🔍" : "📝";
+              const labelColor = isComplete ? G : (isPartial || isTiny) ? "#b44040" : hasUnparsedText ? "#b49000" : BD;
+              const label = isComplete ? "All 4 Batches Detected ✓"
+                : isPartial ? `Only ${Math.floor(scriptCount / 5)} Batch${scriptCount >= 10 ? "es" : ""} Detected!`
+                : isTiny ? `${scriptCount} Script${scriptCount > 1 ? "s" : ""} Found — Keep Pasting`
+                : hasUnparsedText ? "Text Found But No Scripts Detected"
+                : "Paste Your Variation Logs Below";
+              const sublabel = hasUnparsedText ? "Expected format: | S1 | Hook | CTA | ... | — paste the markdown table exactly as Claude outputs it"
+                : (isTiny || isPartial || isComplete) ? `${scriptCount}/20 scripts found`
+                : "Copy the VARIATION LOG table from all 4 prompt outputs";
+
+              return <div style={{ marginBottom: 10, padding: "10px 14px", borderRadius: 8, background: bgColor, border: `1.5px solid ${borderColor}` }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between", flexWrap: "wrap" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ fontSize: 20 }}>{isComplete ? "✅" : isPartial ? "⚠️" : hasUnparsedText ? "🔍" : "📝"}</div>
+                    <div style={{ fontSize: 20 }}>{icon}</div>
                     <div>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: isComplete ? G : isPartial ? "#b44040" : hasUnparsedText ? "#b49000" : BD }}>
-                        {isComplete ? "All 4 Batches Detected ✓" : isPartial ? `Only ${Math.floor(scriptCount / 5)} Batch${scriptCount > 5 ? "es" : ""} Detected!` : hasUnparsedText ? "Text Found But No Scripts Detected" : "Analyzing..."}
-                      </div>
-                      <div style={{ fontSize: 10, color: TL, marginTop: 2 }}>
-                        {hasUnparsedText ? "Expected format: | S1 | Hook | CTA | ... | or | Script 1 | Hook | ..." : isEmpty ? "Paste your variation logs below" : `${scriptCount}/20 scripts found`}
-                      </div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: labelColor }}>{label}</div>
+                      <div style={{ fontSize: 10, color: TL, marginTop: 2 }}>{sublabel}</div>
                     </div>
                   </div>
-                  {isPartial && <div style={{ fontSize: 10, fontWeight: 700, color: "#b44040", maxWidth: 300, textAlign: "right", lineHeight: 1.4 }}>
-                    ⚠️ Missing {Math.ceil((20 - scriptCount) / 5)} batch{(20 - scriptCount) > 5 ? "es" : ""}! Go back to Prompts tab and copy logs from ALL 4 prompts.
+                  {(isPartial || isTiny) && <div style={{ fontSize: 10, fontWeight: 700, color: "#b44040", maxWidth: 300, textAlign: "right", lineHeight: 1.4 }}>
+                    ⚠️ Need {20 - scriptCount} more script{(20 - scriptCount) !== 1 ? "s" : ""}. Copy logs from ALL 4 prompts.
                   </div>}
                   {hasUnparsedText && <div style={{ fontSize: 10, fontWeight: 700, color: "#b49000", maxWidth: 300, textAlign: "right", lineHeight: 1.4 }}>
                     ⚠️ Check format — paste the markdown table from Claude's VARIATION LOG output.
