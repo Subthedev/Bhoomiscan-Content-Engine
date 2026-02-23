@@ -6,7 +6,7 @@ import { useState, useEffect, useRef } from "react";
 // ════════════════════════════════════════════════════════════════════
 
 // Module imports
-import { loadState, saveState, exportState, importState } from './lib/storage.js';
+import { loadState, saveState, saveWeek, exportState, importState } from './lib/storage.js';
 import {
   HOOKS, CTAS, BIOS, USPS, USP_B, USP_SEC,
   PAIN_CYCLE, ANG, FMT, NRG, CAL, SLOTS, COMP,
@@ -211,7 +211,8 @@ export default function App() {
       pains: [rot.pain.p, rot.pain.s], emo: rot.ci,
       log: logT, perf: perfT, mults: Object.keys(mults).length > 0 ? mults : undefined, research: res.slice(0, 2000), ts: new Date().toISOString()
     };
-    setSt({ history: [...hist, rec], lastGen: rec.ts });
+    setSt({ history: [...hist, rec], lastGen: rec.ts }); // triggers saveState via useEffect → localStorage
+    saveWeek(rec); // persist to Supabase (fire and forget — localStorage handled above)
     flash("Week " + cx.wk + " saved");
     setLogT(""); setPerfT(""); setMults({}); setRes(""); setFiles([]); setFinds(null); setPr(null); setRot(null); setCx(null); setVw("home");
   };

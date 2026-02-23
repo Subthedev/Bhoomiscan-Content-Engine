@@ -24,16 +24,22 @@ export async function loadState() {
                     wk: row.week_number,
                     yr: row.year,
                     mo: row.month,
+                    se: row.season || row.rotation?.se || null,
                     pat: row.pattern,
                     ang: row.rotation?.ang || {},
                     hooks: row.rotation?.hooks || [],
+                    ctas: row.rotation?.ctas || [],
+                    pains: row.rotation?.pains || [],
+                    emo: row.rotation?.emo || null,
+                    dt: row.rotation?.dt || null,
                     log: row.log_notes || '',
                     perf: row.perf_notes || '',
                     research: row.research_raw || '',
                     mults: row.multipliers || {},
+                    ts: row.updated_at || null,
                 }));
                 const lastRow = data[data.length - 1];
-                return { history, lastGen: lastRow.created_at };
+                return { history, lastGen: lastRow.updated_at || lastRow.created_at };
             }
             // No data in Supabase yet — try migrating from localStorage
             const local = loadLocal();
@@ -52,12 +58,10 @@ export async function loadState() {
 }
 
 /**
- * Save current week's generation to Supabase (and localStorage as backup).
+ * Save current week's generation to Supabase.
+ * localStorage is handled separately by saveState() via useEffect in App.jsx.
  */
 export async function saveWeek(weekData) {
-    // Always save to localStorage as backup
-    saveLocal(weekData);
-
     if (!supabase) return false;
 
     try {
@@ -67,12 +71,15 @@ export async function saveWeek(weekData) {
                 week_number: weekData.wk,
                 year: weekData.yr,
                 month: weekData.mo,
-                season: weekData.season || null,
+                season: weekData.se || null,
                 pattern: weekData.pat || null,
                 rotation: {
                     ang: weekData.ang || {},
                     hooks: weekData.hooks || [],
-                    pain: weekData.pain || null,
+                    ctas: weekData.ctas || [],
+                    pains: weekData.pains || [],
+                    emo: weekData.emo || null,
+                    dt: weekData.dt || null,
                     se: weekData.se || null,
                 },
                 research_raw: weekData.research || null,
@@ -82,7 +89,7 @@ export async function saveWeek(weekData) {
                 perf_notes: weekData.perf || null,
                 multipliers: weekData.mults || null,
                 shock_stat: weekData.shockStat || null,
-                updated_at: new Date().toISOString(),
+                updated_at: weekData.ts || new Date().toISOString(),
             }, {
                 onConflict: 'week_number,year',
             });
