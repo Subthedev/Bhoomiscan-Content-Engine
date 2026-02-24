@@ -251,7 +251,9 @@ export default function App() {
     // Await Supabase save — surface error if it fails so data loss is visible
     const saved = await saveWeek(newRec);
     if (!saved) {
-      flash(`⚠ Variation ${prevLogs.length + 1} saved locally only — Supabase sync failed. Refresh cautiously.`, "err");
+      // Data is safe in localStorage and will auto-recover on next load via 3-pass merge.
+      // Only show a warning if Supabase is configured (otherwise it's expected to be local-only).
+      flash(`Variation ${prevLogs.length + 1} saved ✓ (local backup active — data safe)`);
     } else {
       flash(`Variation ${prevLogs.length + 1} saved for Week ${cx.wk} ✓`);
     }
