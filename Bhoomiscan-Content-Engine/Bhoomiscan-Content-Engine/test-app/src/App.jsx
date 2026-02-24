@@ -207,7 +207,7 @@ export default function App() {
     }
   };
 
-  const logWeek = () => {
+  const logWeek = async () => {
     if (!cx || !rot) { flash("Generate prompts first", "err"); return; }
     const entryTs = new Date().toISOString();
     const exists = st.history.find(w => w.wk === cx.wk && w.yr === cx.yr);
@@ -222,8 +222,19 @@ export default function App() {
 
     let newRec;
     if (exists) {
-      // Append new entry to existing week — never replace rotation data
-      newRec = { ...exists, logs: [...prevLogs, entry], perf: perfT, ts: entryTs };
+      // Append new entry — also repair any rotation fields missing from old records
+      newRec = {
+        ...exists,
+        logs: [...prevLogs, entry],
+        perf: perfT,
+        ts: entryTs,
+        // Repair fields that may be empty/missing on records saved before the multi-log schema
+        pains: exists.pains?.length > 0 ? exists.pains : [rot.pain.p, rot.pain.s],
+        emo: exists.emo != null ? exists.emo : rot.ci,
+        ang: (exists.ang && Object.keys(exists.ang).length > 0) ? exists.ang : { buyer: rot.ba, seller: rot.sa, agent: rot.aa, nri: rot.na },
+        hooks: exists.hooks?.length > 0 ? exists.hooks : [...rot.hB.b1, ...rot.hB.b2, ...rot.hB.b3, ...rot.hB.b4],
+        ctas: exists.ctas?.length > 0 ? exists.ctas : [...rot.cB.b1, ...rot.cB.b2, ...rot.cB.b3, ...rot.cB.b4],
+      };
     } else {
       newRec = {
         dt: cx.dt, wk: cx.wk, mo: cx.mo, yr: cx.yr, se: cx.se, pat: rot.pat,
@@ -237,8 +248,13 @@ export default function App() {
 
     const hist = exists ? st.history.filter(w => !(w.wk === cx.wk && w.yr === cx.yr)) : st.history;
     setSt({ history: [...hist, newRec], lastGen: entryTs });
-    saveWeek(newRec);
-    flash(`Log ${prevLogs.length + 1} saved for Week ${cx.wk}`);
+    // Await Supabase save — surface error if it fails so data loss is visible
+    const saved = await saveWeek(newRec);
+    if (!saved) {
+      flash(`⚠ Variation ${prevLogs.length + 1} saved locally only — Supabase sync failed. Refresh cautiously.`, "err");
+    } else {
+      flash(`Variation ${prevLogs.length + 1} saved for Week ${cx.wk} ✓`);
+    }
     // Clear input fields only — keep cx/rot/prompts so user can add another entry
     setLogT(""); setPerfT(""); setMults({}); setLogLabel("");
   };

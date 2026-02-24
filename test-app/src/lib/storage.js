@@ -45,6 +45,35 @@ export async function loadState() {
                         ts: row.updated_at || null,
                     };
                 });
+
+                // ── Merge with localStorage ─────────────────────────────────────────
+                // If localStorage has more log entries for any week than Supabase
+                // (e.g. saveWeek failed silently last session), prefer localStorage
+                // and schedule a background Supabase repair so the next refresh is clean.
+                const localData = loadLocal();
+                if (localData?.history?.length) {
+                    let repaired = 0;
+                    for (let i = 0; i < history.length; i++) {
+                        const lw = localData.history.find(
+                            w => w.wk === history[i].wk && w.yr === history[i].yr
+                        );
+                        if (!lw) continue;
+                        const localLogs = Array.isArray(lw.logs) && lw.logs.length > 0
+                            ? lw.logs
+                            : (lw.log ? [{ ts: lw.ts || '', label: 'Log 1', text: lw.log, perf: lw.perf || '' }] : []);
+                        const sbLogs = history[i].logs || [];
+                        if (localLogs.length > sbLogs.length) {
+                            history[i] = { ...history[i], logs: localLogs };
+                            repaired++;
+                            // Repair Supabase async — don't block initial load
+                            saveWeek(history[i]).catch(() => {});
+                        }
+                    }
+                    if (repaired > 0) {
+                        console.log(`[loadState] Recovered ${repaired} week(s) from localStorage (Supabase was behind)`);
+                    }
+                }
+
                 const lastRow = data[data.length - 1];
                 return { history, lastGen: lastRow.updated_at || lastRow.created_at };
             }
