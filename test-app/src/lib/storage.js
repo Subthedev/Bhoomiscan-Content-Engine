@@ -6,7 +6,8 @@ const LS_KEY = 'bhoomiscan-v3';
 
 /**
  * Load engine state — returns { history, lastGen } or null.
- * Tries Supabase first, falls back to localStorage.
+ * Tries Supabase first, then merges with localStorage to recover any
+ * data that failed to persist to Supabase (e.g. silent RLS failures).
  */
 export async function loadState() {
     if (supabase) {
@@ -20,68 +21,71 @@ export async function loadState() {
             if (error) throw error;
 
             if (data && data.length > 0) {
-                const history = data.map(row => {
-                    // Load logs array — fall back to single-entry from log_notes for old rows
-                    const logs = Array.isArray(row.rotation?.logs) && row.rotation.logs.length > 0
-                        ? row.rotation.logs
-                        : (row.log_notes ? [{ ts: row.updated_at || '', label: 'Log 1', text: row.log_notes, perf: row.perf_notes || '' }] : []);
-                    const latestPerf = logs.length > 0 ? (logs[logs.length - 1].perf || '') : (row.perf_notes || '');
-                    return {
-                        wk: row.week_number,
-                        yr: row.year,
-                        mo: row.month,
-                        se: row.season || row.rotation?.se || null,
-                        pat: row.pattern,
-                        ang: row.rotation?.ang || {},
-                        hooks: row.rotation?.hooks || [],
-                        ctas: row.rotation?.ctas || [],
-                        pains: row.rotation?.pains || [],
-                        emo: row.rotation?.emo || null,
-                        dt: row.rotation?.dt || null,
-                        logs,
-                        perf: latestPerf, // latest entry's perf for getPerfWeights backward compat
-                        research: row.research_raw || '',
-                        mults: row.multipliers || {},
-                        ts: row.updated_at || null,
-                    };
-                });
+                const history = data.map(rowToWeek);
 
-                // ── Merge with localStorage ─────────────────────────────────────────
-                // If localStorage has more log entries for any week than Supabase
-                // (e.g. saveWeek failed silently last session), prefer localStorage
-                // and schedule a background Supabase repair so the next refresh is clean.
+                // ── Merge with localStorage (3-pass recovery) ─────────────────────
+                // Supabase upserts can silently fail (RLS UPDATE blocked returns
+                // no error but also writes nothing). localStorage is always current
+                // since saveState runs synchronously via useEffect. We use it as
+                // the source of truth when it has more data than Supabase.
                 const localData = loadLocal();
                 if (localData?.history?.length) {
                     let repaired = 0;
+
+                    // Pass 1: update Supabase weeks where localStorage has more/better data
                     for (let i = 0; i < history.length; i++) {
                         const lw = localData.history.find(
                             w => w.wk === history[i].wk && w.yr === history[i].yr
                         );
                         if (!lw) continue;
-                        const localLogs = Array.isArray(lw.logs) && lw.logs.length > 0
-                            ? lw.logs
-                            : (lw.log ? [{ ts: lw.ts || '', label: 'Log 1', text: lw.log, perf: lw.perf || '' }] : []);
+                        const localLogs = normaliseLogs(lw);
                         const sbLogs = history[i].logs || [];
-                        if (localLogs.length > sbLogs.length) {
-                            history[i] = { ...history[i], logs: localLogs };
+
+                        // Use localStorage if it has more log entries OR if Supabase
+                        // is missing rotation fields that localStorage has
+                        const sbMissingPains = !(history[i].pains?.length > 0);
+                        const sbMissingHooks = !(history[i].hooks?.length > 0);
+                        const needsMerge = localLogs.length > sbLogs.length || sbMissingPains || sbMissingHooks;
+
+                        if (needsMerge) {
+                            history[i] = mergeWeek(history[i], lw, localLogs);
                             repaired++;
-                            // Repair Supabase async — don't block initial load
+                            // Attempt async Supabase repair (fire-and-forget)
                             saveWeek(history[i]).catch(() => {});
                         }
                     }
+
+                    // Pass 2: add weeks that exist in localStorage but NOT in Supabase
+                    for (const lw of localData.history) {
+                        const inSb = history.some(h => h.wk === lw.wk && h.yr === lw.yr);
+                        if (!inSb) {
+                            const localLogs = normaliseLogs(lw);
+                            // Only recover if it has meaningful data
+                            if (localLogs.length > 0 || lw.pat || lw.hooks?.length > 0) {
+                                history.push({ ...lw, logs: localLogs });
+                                repaired++;
+                                saveWeek({ ...lw, logs: localLogs }).catch(() => {});
+                            }
+                        }
+                    }
+
+                    // Re-sort chronologically after any additions
                     if (repaired > 0) {
-                        console.log(`[loadState] Recovered ${repaired} week(s) from localStorage (Supabase was behind)`);
+                        history.sort((a, b) =>
+                            a.yr !== b.yr ? a.yr - b.yr : a.wk - b.wk
+                        );
+                        console.log(`[loadState] Recovered ${repaired} week(s) from localStorage`);
                     }
                 }
 
                 const lastRow = data[data.length - 1];
                 return { history, lastGen: lastRow.updated_at || lastRow.created_at };
             }
-            // No data in Supabase yet — try migrating from localStorage
+
+            // No Supabase data yet — migrate from localStorage
             const local = loadLocal();
             if (local?.history?.length) {
                 console.log('Migrating localStorage data to Supabase...');
-                // Don't block on migration — just start it
                 migrateToSupabase(local).catch(console.error);
             }
             return local;
@@ -95,7 +99,10 @@ export async function loadState() {
 
 /**
  * Save current week's generation to Supabase.
- * localStorage is handled separately by saveState() via useEffect in App.jsx.
+ * Uses .select() to detect silent write failures caused by RLS policies
+ * that allow the call but block the actual row write (returns no error but
+ * also returns no rows). Returns false on any failure so callers can surface
+ * the error to the user instead of silently losing data.
  */
 export async function saveWeek(weekData) {
     if (!supabase) return false;
@@ -103,7 +110,7 @@ export async function saveWeek(weekData) {
     try {
         const logs = Array.isArray(weekData.logs) ? weekData.logs : [];
         const latestLog = logs.length > 0 ? logs[logs.length - 1] : null;
-        const { error } = await supabase
+        const { data, error } = await supabase
             .from('content_engine_weeks')
             .upsert({
                 week_number: weekData.wk,
@@ -124,7 +131,6 @@ export async function saveWeek(weekData) {
                 research_raw: weekData.research || null,
                 research_processed: weekData.findings || null,
                 prompts: weekData.prompts || null,
-                // log_notes / perf_notes: keep latest entry's text for any legacy column reads
                 log_notes: latestLog?.text || null,
                 perf_notes: latestLog?.perf || weekData.perf || null,
                 multipliers: weekData.mults || null,
@@ -132,9 +138,19 @@ export async function saveWeek(weekData) {
                 updated_at: weekData.ts || new Date().toISOString(),
             }, {
                 onConflict: 'week_number,year',
-            });
+            })
+            .select('week_number, year'); // ← detect silent RLS failures
 
         if (error) throw error;
+
+        // If RLS blocks the write, Supabase returns no error but no rows either
+        if (!data || data.length === 0) {
+            throw new Error(
+                `Supabase upsert returned no rows for W${weekData.wk}/${weekData.yr} ` +
+                `— RLS may be blocking anonymous writes on this table`
+            );
+        }
+
         return true;
     } catch (err) {
         console.warn('Supabase save failed:', err.message);
@@ -143,7 +159,8 @@ export async function saveWeek(weekData) {
 }
 
 /**
- * Save full state (history array format) — used for bulk operations.
+ * Save full state to localStorage — called via useEffect in App.jsx on every
+ * state change. This is the primary persistence safety net.
  */
 export async function saveState(state) {
     try {
@@ -173,7 +190,6 @@ export async function getHistory() {
             console.warn('Supabase history fetch failed:', err.message);
         }
     }
-    // Fallback to localStorage
     const state = loadLocal();
     return state?.history || [];
 }
@@ -197,7 +213,6 @@ export async function importState(jsonStr) {
         const data = JSON.parse(jsonStr);
         if (!data.history) throw new Error('Invalid format');
         localStorage.setItem(LS_KEY, jsonStr);
-        // Also push to Supabase if available
         if (supabase && data.history.length) {
             await migrateToSupabase(data);
         }
@@ -205,6 +220,66 @@ export async function importState(jsonStr) {
     } catch (err) {
         throw new Error('Import failed: ' + err.message);
     }
+}
+
+// ═══ INTERNAL HELPERS ═══
+
+/** Map a Supabase row to a week record. */
+function rowToWeek(row) {
+    const logs = Array.isArray(row.rotation?.logs) && row.rotation.logs.length > 0
+        ? row.rotation.logs
+        : (row.log_notes
+            ? [{ ts: row.updated_at || '', label: 'Log 1', text: row.log_notes, perf: row.perf_notes || '' }]
+            : []);
+    const latestPerf = logs.length > 0 ? (logs[logs.length - 1].perf || '') : (row.perf_notes || '');
+    return {
+        wk: row.week_number,
+        yr: row.year,
+        mo: row.month,
+        se: row.season || row.rotation?.se || null,
+        pat: row.pattern,
+        ang: row.rotation?.ang || {},
+        hooks: row.rotation?.hooks || [],
+        ctas: row.rotation?.ctas || [],
+        pains: row.rotation?.pains || [],
+        emo: row.rotation?.emo || null,
+        dt: row.rotation?.dt || null,
+        logs,
+        perf: latestPerf,
+        research: row.research_raw || '',
+        mults: row.multipliers || {},
+        ts: row.updated_at || null,
+    };
+}
+
+/** Normalise a localStorage week record's logs into an array. */
+function normaliseLogs(lw) {
+    if (Array.isArray(lw.logs) && lw.logs.length > 0) return lw.logs;
+    if (lw.log) return [{ ts: lw.ts || '', label: 'Log 1', text: lw.log, perf: lw.perf || '' }];
+    return [];
+}
+
+/**
+ * Merge a Supabase week record with a localStorage week record.
+ * localStorage is assumed to be more up-to-date (more log entries or
+ * rotation fields that Supabase is missing).
+ */
+function mergeWeek(sbWeek, localWeek, localLogs) {
+    return {
+        ...sbWeek,
+        logs: localLogs,
+        // Restore rotation fields from localStorage when Supabase has them empty
+        // (handles records saved before the pains/ang schema was fully wired up)
+        pains: sbWeek.pains?.length > 0 ? sbWeek.pains : (localWeek.pains || []),
+        ang: (sbWeek.ang && Object.keys(sbWeek.ang).length > 0)
+            ? sbWeek.ang : (localWeek.ang || {}),
+        hooks: sbWeek.hooks?.length > 0 ? sbWeek.hooks : (localWeek.hooks || []),
+        ctas: sbWeek.ctas?.length > 0 ? sbWeek.ctas : (localWeek.ctas || []),
+        emo: sbWeek.emo != null ? sbWeek.emo : localWeek.emo,
+        se: sbWeek.se || localWeek.se || null,
+        dt: sbWeek.dt || localWeek.dt || null,
+        pat: sbWeek.pat || localWeek.pat || null,
+    };
 }
 
 // ═══ LOCALSTORAGE HELPERS ═══
@@ -218,45 +293,12 @@ function loadLocal() {
     }
 }
 
-function saveLocal(weekData) {
-    try {
-        const existing = loadLocal() || { history: [], lastGen: null };
-
-        // Find and update existing week, or append
-        const idx = existing.history.findIndex(w => w.wk === weekData.wk && w.yr === weekData.yr);
-        const entry = {
-            wk: weekData.wk,
-            yr: weekData.yr,
-            mo: weekData.mo,
-            pat: weekData.pat,
-            ang: weekData.ang,
-            hooks: weekData.hooks,
-            log: weekData.log || '',
-            perf: weekData.perf || '',
-            mults: weekData.mults || {},
-        };
-
-        if (idx >= 0) {
-            existing.history[idx] = entry;
-        } else {
-            existing.history.push(entry);
-        }
-        existing.lastGen = new Date().toISOString();
-        localStorage.setItem(LS_KEY, JSON.stringify(existing));
-    } catch {
-        console.warn('localStorage save failed');
-    }
-}
-
 async function migrateToSupabase(state) {
     if (!supabase || !state?.history) return;
 
     for (const week of state.history) {
         try {
-            // Normalize to logs array (old records may have log: string)
-            const logs = Array.isArray(week.logs) && week.logs.length > 0
-                ? week.logs
-                : (week.log ? [{ ts: week.ts || '', label: 'Log 1', text: week.log, perf: week.perf || '' }] : []);
+            const logs = normaliseLogs(week);
             const latestLog = logs.length > 0 ? logs[logs.length - 1] : null;
             await supabase.from('content_engine_weeks').upsert({
                 week_number: week.wk,
