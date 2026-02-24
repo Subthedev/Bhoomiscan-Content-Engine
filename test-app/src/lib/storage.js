@@ -20,24 +20,31 @@ export async function loadState() {
             if (error) throw error;
 
             if (data && data.length > 0) {
-                const history = data.map(row => ({
-                    wk: row.week_number,
-                    yr: row.year,
-                    mo: row.month,
-                    se: row.season || row.rotation?.se || null,
-                    pat: row.pattern,
-                    ang: row.rotation?.ang || {},
-                    hooks: row.rotation?.hooks || [],
-                    ctas: row.rotation?.ctas || [],
-                    pains: row.rotation?.pains || [],
-                    emo: row.rotation?.emo || null,
-                    dt: row.rotation?.dt || null,
-                    log: row.log_notes || '',
-                    perf: row.perf_notes || '',
-                    research: row.research_raw || '',
-                    mults: row.multipliers || {},
-                    ts: row.updated_at || null,
-                }));
+                const history = data.map(row => {
+                    // Load logs array — fall back to single-entry from log_notes for old rows
+                    const logs = Array.isArray(row.rotation?.logs) && row.rotation.logs.length > 0
+                        ? row.rotation.logs
+                        : (row.log_notes ? [{ ts: row.updated_at || '', label: 'Log 1', text: row.log_notes, perf: row.perf_notes || '' }] : []);
+                    const latestPerf = logs.length > 0 ? (logs[logs.length - 1].perf || '') : (row.perf_notes || '');
+                    return {
+                        wk: row.week_number,
+                        yr: row.year,
+                        mo: row.month,
+                        se: row.season || row.rotation?.se || null,
+                        pat: row.pattern,
+                        ang: row.rotation?.ang || {},
+                        hooks: row.rotation?.hooks || [],
+                        ctas: row.rotation?.ctas || [],
+                        pains: row.rotation?.pains || [],
+                        emo: row.rotation?.emo || null,
+                        dt: row.rotation?.dt || null,
+                        logs,
+                        perf: latestPerf, // latest entry's perf for getPerfWeights backward compat
+                        research: row.research_raw || '',
+                        mults: row.multipliers || {},
+                        ts: row.updated_at || null,
+                    };
+                });
                 const lastRow = data[data.length - 1];
                 return { history, lastGen: lastRow.updated_at || lastRow.created_at };
             }
@@ -65,6 +72,8 @@ export async function saveWeek(weekData) {
     if (!supabase) return false;
 
     try {
+        const logs = Array.isArray(weekData.logs) ? weekData.logs : [];
+        const latestLog = logs.length > 0 ? logs[logs.length - 1] : null;
         const { error } = await supabase
             .from('content_engine_weeks')
             .upsert({
@@ -81,12 +90,14 @@ export async function saveWeek(weekData) {
                     emo: weekData.emo || null,
                     dt: weekData.dt || null,
                     se: weekData.se || null,
+                    logs, // full array of { ts, label, text, perf, mults } entries
                 },
                 research_raw: weekData.research || null,
                 research_processed: weekData.findings || null,
                 prompts: weekData.prompts || null,
-                log_notes: weekData.log || null,
-                perf_notes: weekData.perf || null,
+                // log_notes / perf_notes: keep latest entry's text for any legacy column reads
+                log_notes: latestLog?.text || null,
+                perf_notes: latestLog?.perf || weekData.perf || null,
                 multipliers: weekData.mults || null,
                 shock_stat: weekData.shockStat || null,
                 updated_at: weekData.ts || new Date().toISOString(),
@@ -213,16 +224,31 @@ async function migrateToSupabase(state) {
 
     for (const week of state.history) {
         try {
+            // Normalize to logs array (old records may have log: string)
+            const logs = Array.isArray(week.logs) && week.logs.length > 0
+                ? week.logs
+                : (week.log ? [{ ts: week.ts || '', label: 'Log 1', text: week.log, perf: week.perf || '' }] : []);
+            const latestLog = logs.length > 0 ? logs[logs.length - 1] : null;
             await supabase.from('content_engine_weeks').upsert({
                 week_number: week.wk,
                 year: week.yr,
                 month: week.mo,
+                season: week.se || null,
                 pattern: week.pat,
-                rotation: { ang: week.ang || {}, hooks: week.hooks || [] },
-                log_notes: week.log || null,
-                perf_notes: week.perf || null,
+                rotation: {
+                    ang: week.ang || {},
+                    hooks: week.hooks || [],
+                    ctas: week.ctas || [],
+                    pains: week.pains || [],
+                    emo: week.emo || null,
+                    dt: week.dt || null,
+                    se: week.se || null,
+                    logs,
+                },
+                log_notes: latestLog?.text || null,
+                perf_notes: latestLog?.perf || week.perf || null,
                 multipliers: week.mults || null,
-                updated_at: new Date().toISOString(),
+                updated_at: week.ts || new Date().toISOString(),
             }, { onConflict: 'week_number,year' });
         } catch {
             // Skip individual failures during migration
