@@ -303,7 +303,12 @@ export default function App() {
             <div><div style={{ fontSize: 15, fontWeight: 800, color: "#fff", letterSpacing: 2.5 }}>BHOOMISCAN</div><div style={{ fontSize: 9, color: "rgba(255,255,255,0.6)", letterSpacing: 1.5 }}>CONTENT ENGINE v4</div></div>
           </div>
           <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-            {nav.map(([id, l, ic]) => <button key={id} onClick={() => setVw(id)} style={{ padding: "7px 13px", borderRadius: 8, border: "none", background: vw === id ? "rgba(255,255,255,0.2)" : "transparent", color: vw === id ? "#fff" : "rgba(255,255,255,0.6)", cursor: "pointer", fontSize: 11, fontWeight: vw === id ? 700 : 500, transition: "all 0.15s" }}>{ic} {l}</button>)}
+            {nav.map(([id, l, ic]) => {
+              const logBadge = id === "log" ? (() => { const wr = st.history.find(w => w.wk === cW && w.yr === now.getFullYear()); return wr ? getLogs(wr).length : 0; })() : 0;
+              return <button key={id} onClick={() => setVw(id)} style={{ padding: "7px 13px", borderRadius: 8, border: "none", background: vw === id ? "rgba(255,255,255,0.2)" : "transparent", color: vw === id ? "#fff" : "rgba(255,255,255,0.6)", cursor: "pointer", fontSize: 11, fontWeight: vw === id ? 700 : 500, transition: "all 0.15s", position: "relative" }}>
+                {ic} {l}{logBadge > 0 && <span style={{ marginLeft: 4, padding: "1px 5px", borderRadius: 7, background: "rgba(255,255,255,0.3)", fontSize: 9, fontWeight: 900, verticalAlign: "middle" }}>{logBadge}</span>}
+              </button>;
+            })}
           </div>
         </div>
       </div>
@@ -409,17 +414,46 @@ export default function App() {
             </div>
           </div>
 
-          {/* Last Week Summary - Enhanced */}
+          {/* Week Activity Summary */}
           {tH > 0 && (() => {
-            const l = st.history[tH - 1]; return <div style={{ ...sC, borderLeft: `4px solid ${GL}`, background: "rgba(45,106,79,0.02)", boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                <div style={{ fontSize: 18 }}>📊</div>
-                <div style={{ fontSize: 14, fontWeight: 800, color: G }}>Last Generated — Week {l.wk} ({l.pat})</div>
+            const currentWeekRec = st.history.find(w => w.wk === cW && w.yr === now.getFullYear());
+            const l = currentWeekRec || st.history[tH - 1];
+            const wLogs = getLogs(l);
+            const totalSc = wLogs.reduce((s, e) => s + countScripts(e.text || ""), 0);
+            const isCurrentWeek = l.wk === cW && l.yr === now.getFullYear();
+            return <div style={{ ...sC, borderLeft: `4px solid ${GL}`, background: "rgba(45,106,79,0.02)", boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ fontSize: 18 }}>📊</div>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: G }}>{isCurrentWeek ? "This Week" : "Last Logged"} — W{l.wk} · Pattern {l.pat}</div>
+                    <div style={{ fontSize: 10, color: TL }}>{MN[(l.mo || 1) - 1]} {l.yr}</div>
+                  </div>
+                </div>
+                {wLogs.length > 0 && <div style={{ textAlign: "right", padding: "6px 12px", background: "rgba(45,106,79,0.08)", borderRadius: 8 }}>
+                  <div style={{ fontSize: 20, fontWeight: 900, color: G, lineHeight: 1 }}>{totalSc > 0 ? totalSc : wLogs.length * 20}</div>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: TL, textTransform: "uppercase", letterSpacing: 0.5 }}>scripts · {wLogs.length} run{wLogs.length > 1 ? "s" : ""}</div>
+                </div>}
               </div>
-              <div style={{ fontSize: 11, color: TL, lineHeight: 2.2 }}>
-                <div style={{ marginBottom: 4 }}><strong style={{ color: BD }}>🎣 Hooks Used:</strong> {[...new Set(l.hooks)].slice(0, 6).map(id => <span key={id} style={{ ...sTag, background: "rgba(45,106,79,0.1)", color: G, padding: "3px 8px", marginRight: 4 }}>{HOOKS.find(h => h.id === id)?.name}</span>)}</div>
-                <div><strong style={{ color: BD }}>💔 Pain Points:</strong> {(l.pains || []).map(p => <span key={p} style={{ ...sTag, background: "rgba(139,111,71,0.1)", color: BN, padding: "3px 8px", marginRight: 4 }}>{p}</span>)}</div>
+              {wLogs.length > 0 ? <div style={{ marginBottom: 10 }}>
+                {wLogs.map((entry, i) => {
+                  const sc = countScripts(entry.text || "");
+                  return <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 12px", background: i % 2 === 0 ? "rgba(45,106,79,0.04)" : "rgba(139,111,71,0.03)", borderRadius: 6, marginBottom: 3, borderLeft: `3px solid ${sc >= 20 ? G : BN}` }}>
+                    <div>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: TX }}>{entry.label || `Variation ${i + 1}`}</span>
+                      {entry.ts && <span style={{ fontSize: 9, color: TXL, marginLeft: 6 }}>{new Date(entry.ts).toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>}
+                    </div>
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: sc >= 20 ? "rgba(45,106,79,0.1)" : sc > 0 ? "rgba(230,162,60,0.1)" : "rgba(139,111,71,0.1)", color: sc >= 20 ? G : sc > 0 ? "#a06000" : BN }}>
+                      {sc >= 20 ? `✓ ${sc} scripts` : sc > 0 ? `${sc} scripts` : "rotation only"}
+                    </span>
+                  </div>;
+                })}
+              </div> : <div style={{ fontSize: 11, color: TXL, fontStyle: "italic", marginBottom: 8 }}>No variation logs yet — run prompts in Claude, then log output in the Log tab</div>}
+              <div style={{ fontSize: 11, color: TL, lineHeight: 2 }}>
+                <div style={{ marginBottom: 2 }}><strong style={{ color: BD }}>🎣 Hooks:</strong> {[...new Set(l.hooks || [])].slice(0, 5).map(id => <span key={id} style={{ ...sTag, background: "rgba(45,106,79,0.1)", color: G }}>{HOOKS.find(h => h.id === id)?.name}</span>)}</div>
+                <div><strong style={{ color: BD }}>💔 Pain:</strong> {(l.pains || []).map(p => <span key={p} style={{ ...sTag, background: "rgba(139,111,71,0.1)", color: BN }}>{p}</span>)}</div>
               </div>
+              {isCurrentWeek && cx && <button style={{ ...sB("p"), marginTop: 10, padding: "8px 16px", fontSize: 11, display: "inline-flex", alignItems: "center", gap: 6 }} onClick={() => setVw("log")}>➕ Add Variation {wLogs.length + 1} for Week {l.wk}</button>}
             </div>;
           })()}
 
@@ -773,194 +807,203 @@ export default function App() {
 
         {/* LOG */}
         {vw === "log" && (() => {
-          const currentRec = cx ? st.history.find(w => w.wk === cx.wk && w.yr === cx.yr) : null;
+          // Works with or without an active generation (cx)
+          const activeWk = cx ? cx.wk : cW;
+          const activeYr = cx ? cx.yr : now.getFullYear();
+          const activeMn = cx ? cx.mn : MN[cM - 1];
+          const currentRec = st.history.find(w => w.wk === activeWk && w.yr === activeYr);
           const existingLogs = getLogs(currentRec);
           const entryNum = existingLogs.length + 1;
+          const totalSc = existingLogs.reduce((s, e) => s + countScripts(e.text || ""), 0);
 
           return <>
-            {/* Existing log entries for this week */}
-            {existingLogs.length > 0 && <div style={{ ...sC, borderLeft: `4px solid ${BN}`, background: "rgba(139,111,71,0.03)", boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                <div style={{ fontSize: 18 }}>📂</div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: BD }}>
-                  {existingLogs.length} Log Entr{existingLogs.length > 1 ? "ies" : "y"} — Week {cx?.wk}
+            {/* ═══ WEEK ACTIVITY CARD — always visible ═══ */}
+            <div style={{ ...sC, borderLeft: `4px solid ${G}`, background: `linear-gradient(135deg,rgba(45,106,79,0.04),rgba(139,111,71,0.03))`, boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: existingLogs.length > 0 ? 12 : 0, flexWrap: "wrap", gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 900, color: G }}>Week {activeWk} — {activeMn} {activeYr}</div>
+                  <div style={{ fontSize: 11, color: TL, marginTop: 3, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    {cx && rot && <span style={{ padding: "2px 8px", borderRadius: 5, background: "rgba(45,106,79,0.12)", color: G, fontWeight: 700, fontSize: 10 }}>Pattern {rot.pat}</span>}
+                    <span style={{ color: existingLogs.length > 0 ? G : TXL, fontWeight: existingLogs.length > 0 ? 600 : 400 }}>
+                      {existingLogs.length > 0 ? `${existingLogs.length} variation${existingLogs.length > 1 ? "s" : ""} logged ✓` : "No variations logged yet"}
+                    </span>
+                  </div>
                 </div>
-                <div style={{ marginLeft: "auto", fontSize: 10, color: TL, fontStyle: "italic" }}>Previous logs are preserved ✓</div>
-              </div>
-              {existingLogs.map((entry, i) => {
-                const sc = countScripts(entry.text || "");
-                return <details key={i} style={{ marginBottom: 6 }}>
-                  <summary style={{ cursor: "pointer", fontSize: 11, fontWeight: 700, color: BN, padding: "7px 12px", background: "rgba(139,111,71,0.08)", borderRadius: 6, userSelect: "none", display: "flex", alignItems: "center", gap: 6 }}>
-                    <span>{entry.label || `Log ${i + 1}`}</span>
-                    {entry.ts && <span style={{ fontWeight: 400, color: TXL }}>— {new Date(entry.ts).toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>}
-                    {sc > 0 && <span style={{ marginLeft: "auto", padding: "1px 7px", borderRadius: 4, background: "rgba(45,106,79,0.12)", color: G, fontSize: 10 }}>{sc} scripts</span>}
-                  </summary>
-                  <pre style={{ ...sPre, marginTop: 4, maxHeight: 160, fontSize: 10 }}>{entry.text || "(no log text)"}</pre>
-                  {entry.perf && <details style={{ marginTop: 4 }}>
-                    <summary style={{ cursor: "pointer", fontSize: 10, fontWeight: 700, color: "#5a7fa0", padding: "4px 8px", userSelect: "none" }}>📈 Performance data</summary>
-                    <pre style={{ ...sPre, marginTop: 2, maxHeight: 80, fontSize: 10 }}>{entry.perf}</pre>
-                  </details>}
-                </details>;
-              })}
-              <div style={{ fontSize: 11, color: G, fontWeight: 600, marginTop: 8, padding: "8px 12px", background: "rgba(45,106,79,0.06)", borderRadius: 6 }}>
-                ➕ Adding Log {entryNum} below — it will be appended, not replace any previous entry.
-              </div>
-            </div>}
-
-            {/* New log entry input */}
-            <div style={{ ...sC, borderLeft: `4px solid ${G}`, boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                <div style={{ fontSize: 20 }}>📊</div>
-                <div style={{ fontSize: 15, fontWeight: 800, color: BD, letterSpacing: 0.3 }}>
-                  {existingLogs.length > 0 ? `Add Log Entry ${entryNum}` : "Log Variation Output"}
-                </div>
+                {existingLogs.length > 0 && <div style={{ textAlign: "right", padding: "8px 16px", background: "rgba(45,106,79,0.08)", borderRadius: 10 }}>
+                  <div style={{ fontSize: 26, fontWeight: 900, color: G, lineHeight: 1 }}>{totalSc > 0 ? totalSc : "—"}</div>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: TL, textTransform: "uppercase", letterSpacing: 0.5, marginTop: 2 }}>scripts logged</div>
+                </div>}
               </div>
 
-              {/* Rotation-per-week explanation — always visible */}
-              {cx && rot && <div style={{ background: "rgba(90,127,160,0.07)", padding: "10px 14px", borderRadius: 8, marginBottom: 12, borderLeft: "3px solid #5a7fa0" }}>
-                <div style={{ fontSize: 11, fontWeight: 800, color: "#5a7fa0", marginBottom: 5 }}>🔁 How Rotation Works</div>
-                <div style={{ fontSize: 11, color: TL, lineHeight: 1.7 }}>
-                  <div>• <strong>Pattern {rot.pat} · Week {cx.wk}</strong> — fixed for this week, changes next week automatically.</div>
-                  <div>• Hooks, CTAs, angles, and pain points are set once per week by the engine.</div>
-                  <div>• Each log entry here captures <strong>a different Claude run</strong> from the same rotation — all entries are preserved and inform future rotation learning.</div>
-                  <div>• Next week, click Generate and the engine will pick fresh angles based on what performed well.</div>
-                </div>
-              </div>}
-
-              {existingLogs.length === 0 && <div style={{ background: "rgba(45,106,79,0.05)", padding: "12px 14px", borderRadius: 8, marginBottom: 12, borderLeft: `3px solid ${G}` }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: G, marginBottom: 6 }}>📋 How to Log (3 Simple Steps):</div>
-                <div style={{ fontSize: 11, color: TL, lineHeight: 1.8 }}>
-                  <div style={{ marginBottom: 3 }}>1️⃣ Copy each of the 4 prompts → Paste into Claude Project</div>
-                  <div style={{ marginBottom: 3 }}>2️⃣ After Claude generates scripts, find the <strong>"VARIATION LOG"</strong> table at the bottom of each batch</div>
-                  <div style={{ marginBottom: 3 }}>3️⃣ Copy <strong>ALL 4 variation log tables</strong> (from all 4 prompts) and paste them below</div>
-                </div>
-              </div>}
-
-              {/* Entry label */}
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: BD, marginBottom: 4 }}>Entry Label <span style={{ color: TXL, fontWeight: 400 }}>(optional)</span></div>
-                <input
-                  style={{ ...sI, fontSize: 12 }}
-                  value={logLabel}
-                  onChange={e => setLogLabel(e.target.value)}
-                  placeholder={`Log ${entryNum} — e.g. "V2 Retake", "Batches 1-2 only", "Week re-run"`}
-                />
-              </div>
-
-              {/* Script Counter with Smart Validation */}
-              {logT.trim() && (() => {
-                const { count: scriptCount, uniqueCount, format: detectedFormat, hasDuplicates } = countScriptsDetailed(logT);
-                const effectiveCount = hasDuplicates ? uniqueCount : scriptCount;
-                const isComplete = effectiveCount >= 20;
-                const isPartial = effectiveCount >= 5 && effectiveCount < 20;
-                const isTiny = effectiveCount > 0 && effectiveCount < 5;
-                const isEmpty = effectiveCount === 0;
-                const hasUnparsedText = logT.trim().length > 50 && isEmpty;
-                const formatLabel = detectedFormat === 'pipe' ? '📋 pipe' : detectedFormat === 'tab' ? '📑 tab' : detectedFormat === 'unstructured' ? '🔄 auto-detected' : detectedFormat === 'lines' ? '📄 line' : '';
-                const bgCol = hasDuplicates ? "rgba(180,64,64,0.1)" : isComplete ? "rgba(45,106,79,0.08)" : (isPartial || isTiny) ? "rgba(180,64,64,0.08)" : hasUnparsedText ? "rgba(180,64,64,0.06)" : "rgba(139,111,71,0.05)";
-                const bdCol = hasDuplicates ? "#b44040" : isComplete ? G : (isPartial || isTiny) ? "#b44040" : hasUnparsedText ? "#b44040" : BR;
-                const ic = hasDuplicates ? "🔴" : isComplete ? "✅" : (isPartial || isTiny) ? "⚠️" : hasUnparsedText ? "🔍" : "📝";
-                const msg = hasDuplicates ? "Duplicate Batches Detected!" : isComplete ? "All 4 Batches Detected ✓" : isPartial ? `Only ${Math.floor(effectiveCount / 5)} Batch${effectiveCount >= 10 ? "es" : ""} Detected!` : isTiny ? `${effectiveCount} Script${effectiveCount > 1 ? "s" : ""} Found — Keep Pasting` : hasUnparsedText ? "Text Found But No Scripts Detected" : "Paste Your Logs Below";
-                const sub = hasDuplicates ? `${scriptCount} found, ${uniqueCount} unique — same log pasted ${Math.round(scriptCount / uniqueCount)}× ${formatLabel}` : (isTiny || isPartial || isComplete) ? `${effectiveCount}/20 scripts ${formatLabel}` : hasUnparsedText ? "Expected: | S1 | Hook | CTA | ... — paste the markdown table" : "";
-                return <div style={{ marginBottom: 10, padding: "10px 14px", borderRadius: 8, background: bgCol, border: `1.5px solid ${bdCol}` }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between", flexWrap: "wrap" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ fontSize: 20 }}>{ic}</div>
-                      <div>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: hasDuplicates ? "#b44040" : isComplete ? G : (isPartial || isTiny) ? "#b44040" : hasUnparsedText ? "#b44040" : BD }}>{msg}</div>
-                        {sub && <div style={{ fontSize: 10, color: TL, marginTop: 2 }}>{sub}</div>}
+              {existingLogs.length > 0 && <div style={{ borderTop: `1px dashed ${BR}`, paddingTop: 10 }}>
+                {existingLogs.map((entry, i) => {
+                  const sc = countScripts(entry.text || "");
+                  return <details key={i} style={{ marginBottom: 5 }}>
+                    <summary style={{ cursor: "pointer", padding: "8px 12px", background: i % 2 === 0 ? "rgba(45,106,79,0.05)" : "rgba(139,111,71,0.04)", borderRadius: 7, userSelect: "none", display: "flex", alignItems: "center", gap: 8, listStyle: "none" }}>
+                      <span style={{ width: 22, height: 22, borderRadius: "50%", background: G, color: "#fff", fontSize: 10, fontWeight: 900, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: TX }}>{entry.label || `Variation ${i + 1}`}</span>
+                        {entry.ts && <span style={{ fontSize: 10, color: TXL, marginLeft: 8 }}>{new Date(entry.ts).toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>}
                       </div>
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 9px", borderRadius: 5, background: sc >= 20 ? "rgba(45,106,79,0.12)" : sc > 0 ? "rgba(230,162,60,0.12)" : "rgba(139,111,71,0.1)", color: sc >= 20 ? G : sc > 0 ? "#a06000" : BN, flexShrink: 0 }}>
+                        {sc >= 20 ? `✓ ${sc} scripts` : sc > 0 ? `${sc}/20` : entry.text ? "logged" : "rotation"}
+                      </span>
+                    </summary>
+                    <div style={{ padding: "8px 12px 4px 44px" }}>
+                      {entry.text && <pre style={{ ...sPre, maxHeight: 160, fontSize: 10 }}>{entry.text}</pre>}
+                      {entry.perf && <details style={{ marginTop: 4 }}>
+                        <summary style={{ cursor: "pointer", fontSize: 10, fontWeight: 700, color: "#5a7fa0", padding: "3px 8px", userSelect: "none" }}>📈 Performance data</summary>
+                        <pre style={{ ...sPre, marginTop: 2, maxHeight: 80, fontSize: 10 }}>{entry.perf}</pre>
+                      </details>}
+                      {!entry.text && <div style={{ fontSize: 10, color: TXL, fontStyle: "italic" }}>Rotation data saved — no log text</div>}
                     </div>
-                    {hasDuplicates && <div style={{ fontSize: 10, fontWeight: 700, color: "#b44040", maxWidth: 280, textAlign: "right", lineHeight: 1.4 }}>🔴 Copy logs from each prompt separately.</div>}
-                    {!hasDuplicates && isPartial && <div style={{ fontSize: 10, fontWeight: 700, color: "#b44040", maxWidth: 280, textAlign: "right", lineHeight: 1.4 }}>⚠️ Need {20 - effectiveCount} more scripts from {Math.ceil((20 - effectiveCount) / 5)} more prompt{Math.ceil((20 - effectiveCount) / 5) > 1 ? "s" : ""}.</div>}
+                  </details>;
+                })}
+                <div style={{ fontSize: 11, color: G, fontWeight: 600, marginTop: 6, padding: "8px 12px", background: "rgba(45,106,79,0.06)", borderRadius: 6 }}>
+                  {cx && rot ? `➕ Adding Variation ${entryNum} below` : "Generate prompts to add another variation for this week"}
+                </div>
+              </div>}
+            </div>
+
+            {/* ═══ ADD VARIATION FORM (only when cx is active) ═══ */}
+            {cx && rot ? <>
+              <div style={{ background: "rgba(90,127,160,0.07)", padding: "10px 14px", borderRadius: 8, marginBottom: 12, borderLeft: "3px solid #5a7fa0" }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: "#5a7fa0", marginBottom: 4 }}>🔁 Rotation Fixed for Week {cx.wk} — Pattern {rot.pat}</div>
+                <div style={{ fontSize: 11, color: TL, lineHeight: 1.7 }}>
+                  <div>• Hooks · CTAs · angles are <strong>identical across every Claude run this week</strong> — only the outputs differ.</div>
+                  <div>• Each variation you save is preserved and informs next week's angle selection automatically.</div>
+                </div>
+              </div>
+
+              <div style={{ ...sC, boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
+                {existingLogs.length === 0 && <div style={{ background: "rgba(45,106,79,0.05)", padding: "12px 14px", borderRadius: 8, marginBottom: 12, borderLeft: `3px solid ${G}` }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: G, marginBottom: 5 }}>📋 3 Steps to Log:</div>
+                  <div style={{ fontSize: 11, color: TL, lineHeight: 1.8 }}>
+                    <div style={{ marginBottom: 2 }}>1️⃣ Copy each of the 4 prompts → paste into Claude Project → run</div>
+                    <div style={{ marginBottom: 2 }}>2️⃣ Claude outputs scripts + a <strong>VARIATION LOG</strong> table at the bottom of each batch</div>
+                    <div>3️⃣ Copy ALL 4 variation tables → paste below → Save</div>
+                  </div>
+                </div>}
+
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: BD, marginBottom: 4 }}>Variation {entryNum} Label <span style={{ fontWeight: 400, color: TXL }}>(optional)</span></div>
+                  <input style={{ ...sI, fontSize: 12 }} value={logLabel} onChange={e => setLogLabel(e.target.value)} placeholder={`e.g. "Run 1", "V2 Retake", "Batches 1-2", "Morning session"`} />
+                </div>
+
+                {logT.trim() && (() => {
+                  const { count: scriptCount, uniqueCount, format: detectedFormat, hasDuplicates } = countScriptsDetailed(logT);
+                  const effectiveCount = hasDuplicates ? uniqueCount : scriptCount;
+                  const isComplete = effectiveCount >= 20;
+                  const isPartial = effectiveCount >= 5 && effectiveCount < 20;
+                  const isTiny = effectiveCount > 0 && effectiveCount < 5;
+                  const isEmpty = effectiveCount === 0;
+                  const hasUnparsedText = logT.trim().length > 50 && isEmpty;
+                  const formatLabel = detectedFormat === 'pipe' ? '📋 pipe' : detectedFormat === 'tab' ? '📑 tab' : detectedFormat === 'unstructured' ? '🔄 auto-detected' : detectedFormat === 'lines' ? '📄 line' : '';
+                  const bgCol = hasDuplicates ? "rgba(180,64,64,0.1)" : isComplete ? "rgba(45,106,79,0.08)" : (isPartial || isTiny) ? "rgba(180,64,64,0.08)" : hasUnparsedText ? "rgba(180,64,64,0.06)" : "rgba(139,111,71,0.05)";
+                  const bdCol = hasDuplicates ? "#b44040" : isComplete ? G : (isPartial || isTiny) ? "#b44040" : hasUnparsedText ? "#b44040" : BR;
+                  const ic = hasDuplicates ? "🔴" : isComplete ? "✅" : (isPartial || isTiny) ? "⚠️" : hasUnparsedText ? "🔍" : "📝";
+                  const msg = hasDuplicates ? "Duplicate Batches Detected!" : isComplete ? "All 4 Batches Detected ✓" : isPartial ? `Only ${Math.floor(effectiveCount / 5)} Batch${effectiveCount >= 10 ? "es" : ""} Detected!` : isTiny ? `${effectiveCount} Script${effectiveCount > 1 ? "s" : ""} Found — Keep Pasting` : hasUnparsedText ? "Text Found But No Scripts Detected" : "Paste Your Logs Below";
+                  const sub = hasDuplicates ? `${scriptCount} found, ${uniqueCount} unique — same log pasted ${Math.round(scriptCount / uniqueCount)}× ${formatLabel}` : (isTiny || isPartial || isComplete) ? `${effectiveCount}/20 scripts ${formatLabel}` : hasUnparsedText ? "Expected: | S1 | Hook | CTA | ... — paste the markdown table" : "";
+                  return <div style={{ marginBottom: 10, padding: "10px 14px", borderRadius: 8, background: bgCol, border: `1.5px solid ${bdCol}` }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between", flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ fontSize: 20 }}>{ic}</div>
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: hasDuplicates ? "#b44040" : isComplete ? G : (isPartial || isTiny) ? "#b44040" : hasUnparsedText ? "#b44040" : BD }}>{msg}</div>
+                          {sub && <div style={{ fontSize: 10, color: TL, marginTop: 2 }}>{sub}</div>}
+                        </div>
+                      </div>
+                      {hasDuplicates && <div style={{ fontSize: 10, fontWeight: 700, color: "#b44040", maxWidth: 280, textAlign: "right", lineHeight: 1.4 }}>🔴 Copy logs from each prompt separately.</div>}
+                      {!hasDuplicates && isPartial && <div style={{ fontSize: 10, fontWeight: 700, color: "#b44040", maxWidth: 280, textAlign: "right", lineHeight: 1.4 }}>⚠️ Need {20 - effectiveCount} more scripts from {Math.ceil((20 - effectiveCount) / 5)} more prompt{Math.ceil((20 - effectiveCount) / 5) > 1 ? "s" : ""}.</div>}
+                    </div>
+                  </div>;
+                })()}
+
+                <div style={{ marginBottom: 0 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: BD, marginBottom: 4 }}>Variation {entryNum} Log Output</div>
+                  <textarea
+                    style={{ ...sI, minHeight: 160, resize: "vertical", fontSize: 11, fontFamily: "Consolas,Monaco,monospace", lineHeight: 1.6 }}
+                    value={logT}
+                    onChange={e => setLogT(e.target.value)}
+                    placeholder={`Paste variation logs here from ALL 4 batches...\n\nFormats auto-detected:\n✓ | S1 | Hook | CTA | ...\n✓ Tab-separated table\n✓ Direct copy from Claude\n\n20 scripts total (5 per prompt × 4 prompts).`}
+                  />
+                  {logT.trim() && <button style={{ ...sB(), marginTop: 6, fontSize: 10 }} onClick={() => { if (window.confirm("Clear log text?")) setLogT(""); }}>🗑️ Clear</button>}
+                </div>
+              </div>
+
+              <div style={sC}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: BD, marginBottom: 6 }}>Performance Tracking <span style={{ fontSize: 10, fontWeight: 400, color: TXL }}>(optional)</span></div>
+                <div style={{ fontSize: 10, color: TL, marginBottom: 8 }}>Format: Script# | Views(24h) | Saves | Shares | Comments | Best/Worst</div>
+                <textarea style={{ ...sI, minHeight: 90, resize: "vertical", fontSize: 11 }} value={perfT} onChange={e => setPerfT(e.target.value)} placeholder="S1 | 12000 | 450 | 120 | 35 | Best&#10;S2 | 8000 | 200 | 80 | 20 |&#10;..." />
+              </div>
+
+              <div style={sC}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: BD, marginBottom: 6 }}>Freshness Multipliers <span style={{ fontSize: 10, fontWeight: 400, color: TXL }}>(optional)</span></div>
+                <div style={{ fontSize: 10, color: TL, marginBottom: 8 }}>Tag angles repeated from a previous week (Strategy 5.3).</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
+                  {MULTIPLIERS.map(m => <button key={m.id} style={{ padding: "5px 10px", borderRadius: 6, fontSize: 10, fontWeight: 600, border: `1px solid ${BR}`, cursor: "pointer", background: Object.values(mults).includes(m.id) ? "rgba(45,106,79,0.12)" : "#faf8f4", color: Object.values(mults).includes(m.id) ? G : TL }} title={m.desc} onClick={() => { const next = prompt(`Tag "${m.name}" to which batch-script? (e.g. b1-s3, b2-s1)`); if (next?.trim()) setMults(p => ({ ...p, [next.trim().toLowerCase()]: m.id })); }}>{m.name}</button>)}
+                </div>
+                {Object.keys(mults).length > 0 && <div style={{ fontSize: 10, color: TL }}><strong>Tagged:</strong> {Object.entries(mults).map(([k, v]) => <span key={k} style={{ ...sTag, background: "rgba(45,106,79,0.08)", color: G }}>{k}: {MULTIPLIERS.find(m => m.id === v)?.name}</span>)}</div>}
+              </div>
+
+              {(() => {
+                const { uniqueCount: uc, hasDuplicates: hd } = countScriptsDetailed(logT);
+                const sc = hd ? uc : countScripts(logT);
+                const hasAllLogs = sc >= 20;
+                const hasPartialLogs = sc >= 5 && sc < 20;
+                const hasUnparsedText = logT.trim().length > 0 && sc === 0;
+                if (hasPartialLogs) return <div style={{ ...sC, background: "rgba(180,64,64,0.06)", borderLeft: "4px solid #b44040" }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: "#b44040", marginBottom: 4 }}>⚠️ Incomplete — {sc} of 20 scripts</div>
+                  <div style={{ fontSize: 11, color: TL }}>Paste logs from all 4 prompts, or clear the text and save rotation-only.</div>
+                </div>;
+                if (hasUnparsedText) return <div style={{ ...sC, background: "rgba(180,64,64,0.04)", borderLeft: "4px solid #e6a23c" }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#e6a23c" }}>🔍 Text found but no scripts detected</div>
+                  <div style={{ fontSize: 10, color: TL, marginTop: 4 }}>Paste the VARIATION LOG table rows: | S1 | Hook | CTA | ...</div>
+                </div>;
+                return <div style={{ ...sC, background: "rgba(45,106,79,0.04)", borderLeft: `4px solid ${G}` }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ fontSize: 18 }}>✅</div>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: G }}>
+                        {existingLogs.length > 0 ? `Ready — Variation ${entryNum} for Week ${cx.wk}` : `Ready to save Week ${cx.wk} — Pattern ${rot?.pat}`}
+                      </div>
+                      {hasAllLogs && <div style={{ fontSize: 10, color: TL, marginTop: 2 }}>✓ All 20 scripts detected</div>}
+                      {!logT.trim() && <div style={{ fontSize: 10, color: TL, marginTop: 2 }}>Saving rotation data only — no log text</div>}
+                    </div>
                   </div>
                 </div>;
               })()}
 
-              <textarea
-                style={{ ...sI, minHeight: 180, resize: "vertical", fontSize: 11, fontFamily: "Consolas,Monaco,monospace", lineHeight: 1.6 }}
-                value={logT}
-                onChange={e => setLogT(e.target.value)}
-                placeholder={`Paste variation logs here from ALL 4 batches...
-
-Accepted formats (all auto-detected):
-✓ Pipe-delimited: | S1 | Confession | Casual Aside | ...
-✓ Tab-separated:  S1  Confession  Casual Aside  ...
-✓ Direct table copy from Claude (no formatting needed)
-
-You need 20 scripts total (5 from each of the 4 prompts).`}
-              />
-              {logT.trim() && <button style={{ ...sB(), marginTop: 8, fontSize: 11 }} onClick={() => { if (window.confirm("Clear log text?")) setLogT(""); }}>🗑️ Clear</button>}
-            </div>
-
-            <div style={sC}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: BD, marginBottom: 8 }}>Performance Tracking <span style={{ fontSize: 11, fontWeight: 400, color: TXL }}>(optional)</span></div>
-              <div style={{ fontSize: 11, color: TL, marginBottom: 8 }}>Format: Script# | Views(24h) | Saves | Shares | Comments | Best/Worst</div>
-              <textarea style={{ ...sI, minHeight: 100, resize: "vertical", fontSize: 11 }} value={perfT} onChange={e => setPerfT(e.target.value)} placeholder="S1 | 12000 | 450 | 120 | 35 | Best&#10;S2 | 8000 | 200 | 80 | 20 |&#10;..." />
-            </div>
-
-            <div style={sC}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: BD, marginBottom: 8 }}>Freshness Multipliers <span style={{ fontSize: 11, fontWeight: 400, color: TXL }}>(optional)</span></div>
-              <div style={{ fontSize: 10, color: TL, marginBottom: 8 }}>If any content angle repeated from a previous week, tag which multiplier was used (Strategy Section 5.3).</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
-                {MULTIPLIERS.map(m => <button key={m.id} style={{ padding: "5px 10px", borderRadius: 6, fontSize: 10, fontWeight: 600, border: `1px solid ${BR}`, cursor: "pointer", background: Object.values(mults).includes(m.id) ? "rgba(45,106,79,0.12)" : "#faf8f4", color: Object.values(mults).includes(m.id) ? G : TL }} title={m.desc} onClick={() => { const next = prompt(`Tag "${m.name}" to which batch-script? (e.g. b1-s3, b2-s1)`); if (next?.trim()) setMults(p => ({ ...p, [next.trim().toLowerCase()]: m.id })); }}>{m.name}</button>)}
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                {(() => {
+                  const { uniqueCount: uc, hasDuplicates: hd } = countScriptsDetailed(logT);
+                  const sc = hd ? uc : countScripts(logT);
+                  const isBlocked = !cx || (sc > 0 && sc < 20) || hd;
+                  return <button
+                    style={{ ...sB("p"), flex: 1, textAlign: "center", display: "flex", justifyContent: "center", alignItems: "center", gap: 6, padding: 14, fontSize: 14, opacity: isBlocked ? 0.5 : 1 }}
+                    onClick={logWeek}
+                    disabled={isBlocked}
+                  >
+                    <span>{hd ? "🔴 Fix duplicates first" : existingLogs.length > 0 ? `➕ Save Variation ${entryNum}` : "✓ Save & Log Week"}</span>
+                  </button>;
+                })()}
+                <button style={{ ...sB(), padding: "14px 20px" }} onClick={() => setVw("prompts")}>← Back</button>
+                {existingLogs.length > 0 && <button style={{ ...sB(), padding: "14px 20px", color: G, fontWeight: 700 }} onClick={() => { setLogT(""); setPerfT(""); setMults({}); setLogLabel(""); setRot(null); setCx(null); setPr(null); setVw("home"); }}>✓ Done</button>}
               </div>
-              {Object.keys(mults).length > 0 && <div style={{ fontSize: 10, color: TL }}><strong>Tagged:</strong> {Object.entries(mults).map(([k, v]) => <span key={k} style={{ ...sTag, background: "rgba(45,106,79,0.08)", color: G }}>{k}: {MULTIPLIERS.find(m => m.id === v)?.name}</span>)}</div>}
-            </div>
-
-            {/* Save Validation */}
-            {(() => {
-              const { uniqueCount: uc, hasDuplicates: hd } = countScriptsDetailed(logT);
-              const sc = hd ? uc : countScripts(logT);
-              const hasAllLogs = sc >= 20;
-              const hasPartialLogs = sc >= 5 && sc < 20;
-              const hasUnparsedText = logT.trim().length > 0 && sc === 0;
-              const isBlocked = !cx || (sc > 0 && sc < 20) || hd;
-
-              if (!cx) return <div style={{ ...sC, background: "rgba(180,64,64,0.04)", borderLeft: "4px solid #b44040" }}>
-                <div style={{ fontSize: 13, color: "#b44040", fontWeight: 600 }}>⚠️ Generate prompts first (Go to Generate tab)</div>
-              </div>;
-
-              if (hasPartialLogs) return <div style={{ ...sC, background: "rgba(180,64,64,0.06)", borderLeft: "4px solid #b44040" }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: "#b44040", marginBottom: 4 }}>⚠️ Incomplete — {sc} of 20 scripts</div>
-                <div style={{ fontSize: 11, color: TL }}>Paste logs from all 4 prompts, or save with what you have by clearing the partial text and using the label to note it.</div>
-              </div>;
-
-              if (hasUnparsedText) return <div style={{ ...sC, background: "rgba(180,64,64,0.04)", borderLeft: "4px solid #e6a23c" }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#e6a23c" }}>🔍 Text found but no scripts detected</div>
-                <div style={{ fontSize: 10, color: TL, marginTop: 4 }}>Paste the VARIATION LOG table rows: | S1 | Hook | CTA | ...</div>
-              </div>;
-
-              return <div style={{ ...sC, background: "rgba(45,106,79,0.04)", borderLeft: `4px solid ${G}` }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ fontSize: 18 }}>✅</div>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: G }}>
-                      {existingLogs.length > 0 ? `Ready to add Log ${entryNum} to Week ${cx.wk}` : `Ready to save Week ${cx.wk}, ${cx.mn} ${cx.yr} — Pattern ${rot?.pat}`}
-                    </div>
-                    {hasAllLogs && <div style={{ fontSize: 10, color: TL, marginTop: 2 }}>✓ All 20 scripts detected</div>}
-                    {!logT.trim() && <div style={{ fontSize: 10, color: TL, marginTop: 2 }}>Saving week with no log text (rotation data only)</div>}
-                  </div>
-                </div>
-              </div>;
-            })()}
-
-            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-              {(() => {
-                const { uniqueCount: uc, hasDuplicates: hd } = countScriptsDetailed(logT);
-                const sc = hd ? uc : countScripts(logT);
-                const isBlocked = !cx || (sc > 0 && sc < 20) || hd;
-                return <button
-                  style={{ ...sB("p"), flex: 1, textAlign: "center", display: "flex", justifyContent: "center", alignItems: "center", gap: 6, padding: 14, fontSize: 14, opacity: isBlocked ? 0.5 : 1 }}
-                  onClick={logWeek}
-                  disabled={isBlocked}
-                >
-                  <span>{hd ? "🔴 Fix duplicates first" : existingLogs.length > 0 ? `➕ Add Log ${entryNum}` : "✓ Save & Log Week"}</span>
-                </button>;
-              })()}
-              <button style={{ ...sB(), padding: "14px 20px" }} onClick={() => setVw("prompts")}>← Back</button>
-              {existingLogs.length > 0 && <button style={{ ...sB(), padding: "14px 20px", color: G, fontWeight: 700 }} onClick={() => { setLogT(""); setPerfT(""); setMults({}); setLogLabel(""); setRot(null); setCx(null); setPr(null); setVw("home"); }}>✓ Done</button>}
-            </div>
+            </> : (
+              <div style={{ ...sC, textAlign: "center", padding: "32px 20px" }}>
+                {existingLogs.length > 0 ? <>
+                  <div style={{ fontSize: 22, marginBottom: 8 }}>✅</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: G, marginBottom: 8 }}>Week {activeWk} — {existingLogs.length} variation{existingLogs.length > 1 ? "s" : ""} logged</div>
+                  <div style={{ fontSize: 11, color: TL, marginBottom: 16 }}>All variations are preserved above. To add another, generate prompts and run Claude again for this week.</div>
+                </> : <>
+                  <div style={{ fontSize: 36, marginBottom: 10, opacity: 0.35 }}>📊</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: BD, marginBottom: 8 }}>No active generation</div>
+                  <div style={{ fontSize: 11, color: TL, marginBottom: 16 }}>Go to Generate → create prompts → run Claude → come back here to log the variation output.</div>
+                </>}
+                <button style={{ ...sB("p"), padding: "10px 24px", fontSize: 12 }} onClick={() => setVw("generate")}>⚡ Go to Generate</button>
+              </div>
+            )}
           </>;
         })()}
 
