@@ -525,29 +525,38 @@ export function parsePerf(perfText) {
     return results.length > 0 ? results : null;
 }
 
-// FIX 10b: Analyze historical performance data to generate angle weights
+// FIX 10b: Analyze historical performance data to generate angle weights.
+// Aggregates perf across ALL log entries per week (multi-log support).
 export function getPerfWeights(history, audience) {
     if (!history?.length) return null;
     const weights = {};
     const recent = history.slice(-4);
     for (const week of recent) {
-        if (!week.perf) continue;
-        const perfData = parsePerf(week.perf);
-        if (!perfData) continue;
+        // Collect all perf strings — from logs[] array (new) or week.perf fallback (old)
+        const perfSources = Array.isArray(week.logs) && week.logs.length > 0
+            ? week.logs.filter(e => e?.perf).map(e => e.perf)
+            : week.perf ? [week.perf] : [];
+        if (!perfSources.length) continue;
+
         const angles = week.ang?.[audience];
         if (!angles?.length) continue;
         const batchOffset = audience === 'buyer' ? 0 : audience === 'seller' ? 5 : audience === 'agent' ? 10 : audience === 'nri' ? 13 : 15;
         const batchSize = audience === 'agent' ? 3 : audience === 'nri' ? 2 : 5;
-        for (let i = 0; i < Math.min(angles.length, batchSize); i++) {
-            const scriptIdx = batchOffset + i;
-            const scriptId = `S${scriptIdx + 1}`;
-            const perf = perfData.find(p => p.id.toUpperCase() === scriptId.toUpperCase());
-            if (!perf) continue;
-            const angleIdx = angles[i];
-            if (perf.tag === 'best' || perf.score > 2000) {
-                weights[angleIdx] = (weights[angleIdx] || 0) - 1;
-            } else if (perf.tag === 'worst' || perf.score < 200) {
-                weights[angleIdx] = (weights[angleIdx] || 0) + 1;
+
+        for (const perfText of perfSources) {
+            const perfData = parsePerf(perfText);
+            if (!perfData) continue;
+            for (let i = 0; i < Math.min(angles.length, batchSize); i++) {
+                const scriptIdx = batchOffset + i;
+                const scriptId = `S${scriptIdx + 1}`;
+                const perf = perfData.find(p => p.id.toUpperCase() === scriptId.toUpperCase());
+                if (!perf) continue;
+                const angleIdx = angles[i];
+                if (perf.tag === 'best' || perf.score > 2000) {
+                    weights[angleIdx] = (weights[angleIdx] || 0) - 1;
+                } else if (perf.tag === 'worst' || perf.score < 200) {
+                    weights[angleIdx] = (weights[angleIdx] || 0) + 1;
+                }
             }
         }
     }

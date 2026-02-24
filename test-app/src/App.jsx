@@ -458,7 +458,7 @@ export default function App() {
                   <div style={{ fontSize: 13, fontWeight: 800, color: G, letterSpacing: 0.5 }}>{dateOvr ? "Custom Date Selected" : "Today's Date"}</div>
                 </div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: TX, marginBottom: 6 }}>{(dateOvr ? new Date(dateOvr + "T12:00:00") : now).toLocaleDateString("en-IN", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</div>
-                {st.history.find(w => w.wk === cW && w.yr === now.getFullYear()) && <div style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "#b44040", fontWeight: 600, background: "rgba(180,64,64,0.08)", padding: "4px 10px", borderRadius: 6 }}>⚠ Week already logged</div>}
+                {(() => { const wr = st.history.find(w => w.wk === cW && w.yr === now.getFullYear()); if (!wr) return null; const lc = getLogs(wr).length; return <div style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "#5a7fa0", fontWeight: 600, background: "rgba(90,127,160,0.09)", padding: "4px 10px", borderRadius: 6 }}>📂 Week {cW} — {lc} log entr{lc > 1 ? "ies" : "y"} · Add more in Log tab</div>; })()}
               </div>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: 10, color: TL, marginBottom: 4, fontWeight: 600 }}>Override Date:</div>
@@ -815,6 +815,17 @@ export default function App() {
                   {existingLogs.length > 0 ? `Add Log Entry ${entryNum}` : "Log Variation Output"}
                 </div>
               </div>
+
+              {/* Rotation-per-week explanation — always visible */}
+              {cx && rot && <div style={{ background: "rgba(90,127,160,0.07)", padding: "10px 14px", borderRadius: 8, marginBottom: 12, borderLeft: "3px solid #5a7fa0" }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: "#5a7fa0", marginBottom: 5 }}>🔁 How Rotation Works</div>
+                <div style={{ fontSize: 11, color: TL, lineHeight: 1.7 }}>
+                  <div>• <strong>Pattern {rot.pat} · Week {cx.wk}</strong> — fixed for this week, changes next week automatically.</div>
+                  <div>• Hooks, CTAs, angles, and pain points are set once per week by the engine.</div>
+                  <div>• Each log entry here captures <strong>a different Claude run</strong> from the same rotation — all entries are preserved and inform future rotation learning.</div>
+                  <div>• Next week, click Generate and the engine will pick fresh angles based on what performed well.</div>
+                </div>
+              </div>}
 
               {existingLogs.length === 0 && <div style={{ background: "rgba(45,106,79,0.05)", padding: "12px 14px", borderRadius: 8, marginBottom: 12, borderLeft: `3px solid ${G}` }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: G, marginBottom: 6 }}>📋 How to Log (3 Simple Steps):</div>
