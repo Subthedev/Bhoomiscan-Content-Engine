@@ -1,0 +1,32 @@
+{
+  "name": "bhoomiscan-video-engine",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "serve": "npx tsx serve.ts",
+    "studio": "remotion studio",
+    "generate": "npx tsx generate.ts",
+    "generate:all": "npx tsx generate.ts --all",
+    "generate:test": "npx tsx generate.ts --id=dca74421-7b18-4341-b1d6-f3c23ff1cf36 --no-voiceover --no-upload",
+    "render": "npx tsx render.ts",
+    "render:test": "npx tsx render.ts --property-id=test --no-voiceover",
+    "voiceover:test": "npx tsx src/voiceover/generateVoiceover.ts --test"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.242",
+    "@remotion/google-fonts": "4.0.242",
+    "@remotion/renderer": "4.0.242",
+    "@supabase/supabase-js": "^2.49.1",
+    "dotenv": "^16.4.7",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "4.0.242",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.3"
+  }
+}

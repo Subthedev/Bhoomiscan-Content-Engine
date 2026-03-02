@@ -2,3 +2,8 @@
 .DS_Store
 node_modules/
 *.log
+.env
+.env.*
+!.env.example
+bhoomiscan-video-engine/output/
+bhoomiscan-video-engine/public/audio/

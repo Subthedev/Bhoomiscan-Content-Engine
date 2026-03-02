@@ -16,6 +16,7 @@ import {
 } from './lib/rotation.js';
 import { processResearch, processMultiSource, extractFileText } from './lib/research-processor.js';
 import { mkP1, mkP2, mkP3, mkP4, mkClean, getResearchPrompts } from './lib/prompt-builder.js';
+import { fetchProperties, triggerVideoGeneration, triggerBatchGeneration, getActiveJobs, getWalkthroughVideos, cancelVideoGeneration, retryVideoUpload, checkEngineHealth, resetStuckJobs, fmtPrice, fmtArea, timeSince, estimateProgress, subscribeToVideoUpdates, unsubscribeFromVideoUpdates } from './lib/video-api.js';
 
 // ═══ COMPONENT ═══
 const MN = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -39,6 +40,21 @@ export default function App() {
   const [dateOvr, setDateOvr] = useState("");
   const [mults, setMults] = useState({}); // freshness multipliers: {angKey: multiplier_id}
   const [logLabel, setLogLabel] = useState(""); // optional label for current log entry
+  // ── Video tab state ──
+  const [vidProps, setVidProps] = useState([]);      // all published properties
+  const [vidSel, setVidSel] = useState([]);          // selected property IDs for batch
+  const [vidPick, setVidPick] = useState(null);      // single selected property object
+  const [vidJobs, setVidJobs] = useState([]);         // active queued/rendering jobs
+  const [vidHist, setVidHist] = useState([]);         // Remotion walkthrough videos only
+  const [vidLoad, setVidLoad] = useState(false);
+  const [vidSearch, setVidSearch] = useState("");
+  const [vidVariant, setVidVariant] = useState("spotlight");
+  const [vidVoice, setVidVoice] = useState(true);
+  const [vidUpload, setVidUpload] = useState(true);
+  const [vidView, setVidView] = useState("properties"); // "properties" | "gallery"
+  const [vidShowSettings, setVidShowSettings] = useState(false);
+  const [vidPlayUrl, setVidPlayUrl] = useState(null); // video URL for lightbox player
+  const [vidEngine, setVidEngine] = useState({ online: false }); // engine status
   const iR = useRef(null);
 
   // Normalize a week record's logs to an array (backward compat: old records have log: string)
@@ -53,6 +69,77 @@ export default function App() {
   useEffect(() => { if (!loading) saveState(st); }, [st, loading]);
 
   const flash = (m, t) => { setToast({ m, t: t || "ok" }); setTimeout(() => setToast(null), t === "err" ? 5000 : 3000); };
+
+  // ── Video tab: load properties + active jobs + walkthrough videos + engine status ──
+  const loadVideoData = async () => {
+    setVidLoad(true);
+    try {
+      const [propsRes, jobsRes, histRes, engineRes] = await Promise.all([
+        fetchProperties(),
+        getActiveJobs(),
+        getWalkthroughVideos(),
+        checkEngineHealth(),
+      ]);
+      if (propsRes.error) console.error('[video] fetchProperties:', propsRes.error);
+      setVidProps(propsRes.data || []);
+      setVidJobs(jobsRes.data || []);
+      setVidHist(histRes.data || []);
+      setVidEngine(engineRes);
+      // Auto-reset stuck jobs
+      await resetStuckJobs();
+      if (propsRes.error && propsRes.error !== 'Supabase not configured') flash(propsRes.error, "err");
+    } catch (e) {
+      console.error('[video] loadVideoData failed:', e);
+      flash("Failed to load properties", "err");
+    }
+    setVidLoad(false);
+  };
+  useEffect(() => { if (vw === "video") loadVideoData(); }, [vw]);
+
+  // Poll active jobs every 4s while on video tab + real-time sub
+  useEffect(() => {
+    if (vw !== "video") return;
+    // Real-time subscription for instant status updates
+    const channel = subscribeToVideoUpdates((updated) => {
+      // Refresh all data when any property video status changes
+      loadVideoData();
+    });
+    // Also poll every 4s for progress animation
+    const iv = setInterval(async () => {
+      if (vidJobs.length > 0) {
+        const { data } = await getActiveJobs();
+        if (data) setVidJobs(data);
+        if (data && data.length === 0) { loadVideoData(); }
+      }
+    }, 4000);
+    return () => {
+      clearInterval(iv);
+      if (channel) unsubscribeFromVideoUpdates(channel);
+    };
+  }, [vw, vidJobs.length]);
+
+  // Video generation handlers
+  const handleQueueSingle = async (property) => {
+    const p = property || vidPick;
+    if (!p) return flash("Select a property first", "err");
+    const { error, engineTriggered } = await triggerVideoGeneration(p.id, { variant: vidVariant, voiceover: vidVoice, upload: vidUpload });
+    if (error) return flash(error, "err");
+    flash(engineTriggered ? `Generating: ${p.title}` : `Queued: ${p.title} — start the video engine to process`);
+    setVidPick(null);
+    loadVideoData();
+  };
+  const handleQueueBatch = async () => {
+    if (vidSel.length === 0) return flash("No properties selected", "err");
+    const res = await triggerBatchGeneration(vidSel, { variant: vidVariant, voiceover: vidVoice, upload: vidUpload });
+    flash(res.engineTriggered ? `Generating ${res.queued} videos` : `Queued ${res.queued} — start the video engine to process`);
+    setVidSel([]);
+    loadVideoData();
+  };
+  const handleCancelJob = async (id) => {
+    await cancelVideoGeneration(id);
+    flash("Cancelled");
+    loadVideoData();
+  };
 
   // FIX 2: Real file extraction — async handler for PDF/DOCX/text
   const onFiles = async (e) => {
@@ -308,7 +395,7 @@ export default function App() {
   // FIX 6: Compute preview rotation for context-aware research prompts
   const previewRot = rot || calc(cW, cM, st.history);
   const previewCx = cx || { wk: cW, mo: cM, yr: previewDate.getFullYear(), mn: MN[cM - 1], se: szn(cM) };
-  const nav = [["home", "Dashboard", "◈"], ["generate", "Generate", "⚡"], ["prompts", "Prompts", "◻"], ["log", "Log", "✎"], ["history", "History", "◷"]];
+  const nav = [["home", "Dashboard", "◈"], ["generate", "Generate", "⚡"], ["prompts", "Prompts", "◻"], ["log", "Log", "✎"], ["history", "History", "◷"], ["video", "Video", "▶"]];
   const pColors = [G, BN, "#5a7fa0", "#a67c52", GL];
 
   return (
@@ -1090,6 +1177,275 @@ export default function App() {
                 })()}
               </div>;
             })}
+        </>}
+
+        {/* ═══════════════════ VIDEO TAB ═══════════════════ */}
+        {vw === "video" && <>
+          {/* ── Header ── */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: G, marginBottom: 2 }}>Video Studio</div>
+              <div style={{ fontSize: 11, color: TL }}>Generate Remotion walkthrough videos for your properties</div>
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              {/* Engine status */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", background: W, borderRadius: 8, border: `1px solid ${BR}`, fontSize: 10, fontWeight: 600, color: vidEngine.online ? G : "#b44040" }}>
+                <div style={{ width: 7, height: 7, borderRadius: "50%", background: vidEngine.online ? G : "#b44040" }} />
+                Engine {vidEngine.online ? "Online" : "Offline"}
+              </div>
+              {/* Stats */}
+              <div style={{ display: "flex", gap: 1, background: BR, borderRadius: 8, overflow: "hidden" }}>
+                <div style={{ textAlign: "center", padding: "5px 12px", background: W }}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: G }}>{vidProps.length}</div>
+                  <div style={{ fontSize: 8, color: TL, fontWeight: 600, textTransform: "uppercase" }}>Properties</div>
+                </div>
+                <div style={{ textAlign: "center", padding: "5px 12px", background: W }}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: BN }}>{vidHist.length}</div>
+                  <div style={{ fontSize: 8, color: TL, fontWeight: 600, textTransform: "uppercase" }}>Walkthrough</div>
+                </div>
+                <div style={{ textAlign: "center", padding: "5px 12px", background: W }}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: "#e0922f" }}>{vidJobs.length}</div>
+                  <div style={{ fontSize: 8, color: TL, fontWeight: 600, textTransform: "uppercase" }}>Active</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Tabs + Refresh ── */}
+          <div style={{ display: "flex", gap: 4, marginBottom: 14, alignItems: "center" }}>
+            {[["properties", "Properties"], ["gallery", "Walkthrough Videos"]].map(([id, label]) => (
+              <button key={id} onClick={() => setVidView(id)} style={{ padding: "8px 16px", borderRadius: 8, border: vidView === id ? `2px solid ${G}` : `1px solid ${BR}`, background: vidView === id ? "rgba(45,106,79,0.06)" : W, color: vidView === id ? G : TL, cursor: "pointer", fontSize: 12, fontWeight: vidView === id ? 700 : 500 }}>
+                {label}
+              </button>
+            ))}
+            <div style={{ flex: 1 }} />
+            <button style={{ ...sB(), padding: "7px 12px", fontSize: 11 }} onClick={loadVideoData}>↻ Refresh</button>
+          </div>
+
+          {/* Loading */}
+          {vidLoad && <div style={{ textAlign: "center", padding: 40, color: TL, fontSize: 12 }}>
+            <div style={{ width: 28, height: 28, border: `3px solid ${G}`, borderTop: "3px solid transparent", borderRadius: "50%", margin: "0 auto 10px", animation: "s 1s linear infinite" }} />
+            Loading...
+          </div>}
+
+          {/* ── Engine offline warning ── */}
+          {!vidLoad && !vidEngine.online && vidView === "properties" && <div style={{ ...sC, background: "rgba(180,64,64,0.04)", borderLeft: "3px solid #b44040", padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ fontSize: 20 }}>⚠</div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#b44040", marginBottom: 2 }}>Video Engine not responding</div>
+              <div style={{ fontSize: 10, color: TL }}>Restart the dev server to restore the embedded engine. The engine runs automatically inside Vite.</div>
+            </div>
+          </div>}
+
+          {/* ═══ ACTIVE JOBS ═══ */}
+          {vidJobs.length > 0 && <div style={{ ...sC, background: "linear-gradient(135deg, rgba(45,106,79,0.03), rgba(224,146,47,0.03))", borderLeft: `3px solid #e0922f` }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: TX, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#e0922f", animation: "s 2s linear infinite" }} />
+              Generating {vidJobs.length} video{vidJobs.length > 1 ? "s" : ""}
+            </div>
+            {vidJobs.map(j => {
+              const prog = estimateProgress(j.video_generation_config);
+              const isRendering = j.video_generation_status === "rendering";
+              return (
+                <div key={j.id} style={{ padding: "10px 0", borderBottom: `1px solid ${BR}` }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                    <div>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: TX }}>{j.title}</span>
+                      <span style={{ fontSize: 10, color: TL, marginLeft: 8 }}>{j.city} · {fmtPrice(j.price)}</span>
+                    </div>
+                    <button style={{ background: "none", border: `1px solid rgba(180,64,64,0.2)`, color: "#b44040", padding: "3px 10px", borderRadius: 5, fontSize: 10, fontWeight: 600, cursor: "pointer" }} onClick={() => handleCancelJob(j.id)}>Cancel</button>
+                  </div>
+                  <div style={{ background: "rgba(0,0,0,0.06)", borderRadius: 4, height: 5, overflow: "hidden", marginBottom: 4 }}>
+                    <div style={{ height: "100%", borderRadius: 4, background: isRendering ? `linear-gradient(90deg, ${G}, #e0922f)` : G, width: `${isRendering ? prog.percent : 5}%`, transition: "width 1s ease" }} />
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: TL }}>
+                    <span style={{ fontWeight: 600, color: isRendering ? "#e0922f" : G }}>{isRendering ? `${prog.stage}...` : "Queued — waiting for engine"}</span>
+                    <span>{isRendering ? `${prog.percent}% · ${prog.elapsed}s` : ""}</span>
+                  </div>
+                  {isRendering && <div style={{ display: "flex", gap: 3, marginTop: 6 }}>
+                    {["Analyzing", "Voiceover", "Bundling", "Rendering", "Uploading"].map((stage, i) => {
+                      const active = prog.stage === stage;
+                      const done = ["Analyzing", "Voiceover", "Bundling", "Rendering", "Uploading"].indexOf(prog.stage) > i;
+                      return <div key={stage} style={{ flex: 1, textAlign: "center", padding: "3px 0", borderRadius: 3, fontSize: 8, fontWeight: 600, background: active ? "rgba(224,146,47,0.12)" : done ? "rgba(45,106,79,0.08)" : "rgba(0,0,0,0.02)", color: active ? "#e0922f" : done ? G : TL }}>
+                        {done ? "✓" : active ? "●" : "○"} {stage}
+                      </div>;
+                    })}
+                  </div>}
+                </div>
+              );
+            })}
+          </div>}
+
+          {/* ═══ PROPERTIES VIEW ═══ */}
+          {!vidLoad && vidView === "properties" && <>
+            {/* Toolbar */}
+            <div style={{ ...sC, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "12px 16px" }}>
+              <div style={{ flex: 1, minWidth: 180, position: "relative" }}>
+                <input style={{ ...sI, paddingLeft: 32, padding: "8px 12px 8px 32", fontSize: 12 }} placeholder="Search by name, city..." value={vidSearch} onChange={e => setVidSearch(e.target.value)} />
+                <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 13, opacity: 0.35 }}>🔍</span>
+              </div>
+              {vidSel.length > 0 && <>
+                <button style={{ ...sB("p"), padding: "7px 14px", fontSize: 11 }} onClick={handleQueueBatch}>Generate {vidSel.length} Selected</button>
+                <button style={{ ...sB(), padding: "7px 10px", fontSize: 11 }} onClick={() => setVidSel([])}>Clear</button>
+              </>}
+              <button style={{ ...sB(), padding: "7px 10px", fontSize: 11 }} onClick={() => { const pending = vidProps.filter(p => !p.hasWalkthroughVideo && !p.video_generation_status); setVidSel(pending.map(p => p.id)); flash(`Selected ${pending.length} without walkthrough`); }}>Select All</button>
+              <button style={{ ...sB(), padding: "7px 10px", fontSize: 11 }} onClick={() => setVidShowSettings(!vidShowSettings)}>
+                ⚙ {vidShowSettings ? "Hide" : "Settings"}
+              </button>
+            </div>
+
+            {/* Settings panel */}
+            {vidShowSettings && <div style={{ ...sC, background: "#faf8f4", padding: "14px 16px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: TL, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>Video Style</div>
+                  {[["spotlight", "Spotlight", "Focus on key details"], ["cinematic", "Cinematic", "Dramatic transitions"], ["minimal", "Minimal", "Clean & simple"]].map(([v, label, desc]) => (
+                    <label key={v} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: TX, cursor: "pointer", marginBottom: 4, padding: "5px 8px", borderRadius: 6, background: vidVariant === v ? "rgba(45,106,79,0.06)" : "transparent", border: vidVariant === v ? `1px solid ${G}` : "1px solid transparent" }}>
+                      <input type="radio" name="vidVariant" checked={vidVariant === v} onChange={() => setVidVariant(v)} style={{ accentColor: G }} />
+                      <span style={{ fontWeight: 600 }}>{label}</span>
+                      <span style={{ fontSize: 9, color: TL }}>— {desc}</span>
+                    </label>
+                  ))}
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: TL, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>Options</div>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: TX, cursor: "pointer", marginBottom: 6, padding: "5px 8px", borderRadius: 6 }}>
+                    <input type="checkbox" checked={vidVoice} onChange={e => setVidVoice(e.target.checked)} style={{ accentColor: G }} />
+                    <span><strong>Odia Voiceover</strong> — AI narration via Sarvam</span>
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: TX, cursor: "pointer", padding: "5px 8px", borderRadius: 6 }}>
+                    <input type="checkbox" checked={vidUpload} onChange={e => setVidUpload(e.target.checked)} style={{ accentColor: G }} />
+                    <span><strong>Auto-upload</strong> — Push to Cloudinary CDN</span>
+                  </label>
+                </div>
+              </div>
+            </div>}
+
+            {/* Property grid */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
+              {vidProps.filter(p => {
+                if (!vidSearch) return true;
+                const q = vidSearch.toLowerCase();
+                return (p.title || "").toLowerCase().includes(q) || (p.city || "").toLowerCase().includes(q) || (p.address || "").toLowerCase().includes(q);
+              }).map(p => {
+                const isQueued = p.video_generation_status === "queued" || p.video_generation_status === "rendering";
+                const isFailed = p.video_generation_status === "failed";
+                const isUploadFailed = p.video_generation_status === "upload_failed";
+                const isSelected = vidSel.includes(p.id);
+                const expanded = vidPick?.id === p.id;
+                return (
+                  <div key={p.id} style={{ background: W, border: `1.5px solid ${expanded ? G : isSelected ? G : BR}`, borderRadius: 12, overflow: "hidden", transition: "all 0.2s", boxShadow: expanded ? `0 0 0 2px rgba(45,106,79,0.15)` : isSelected ? `0 0 0 1px rgba(45,106,79,0.1)` : "0 1px 3px rgba(0,0,0,0.04)", cursor: "pointer" }} onClick={() => setVidPick(expanded ? null : p)}>
+                    {/* Thumbnail / Video preview */}
+                    <div style={{ height: 150, background: "#f0ece5", position: "relative", overflow: "hidden" }}>
+                      {/* Show seller video if available, otherwise primary image */}
+                      {p.hasSellerVideo ? (
+                        <div style={{ width: "100%", height: "100%", position: "relative" }}>
+                          <video src={p.video_url} muted style={{ width: "100%", height: "100%", objectFit: "cover" }} onMouseEnter={e => { e.target.currentTime = 0; e.target.play().catch(() => {}); }} onMouseLeave={e => e.target.pause()} />
+                          {/* Video play indicator */}
+                          <div style={{ position: "absolute", bottom: 8, left: 8, background: "rgba(0,0,0,0.7)", color: W, padding: "2px 8px", borderRadius: 4, fontSize: 9, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>▶ Seller Video</div>
+                        </div>
+                      ) : p.primaryImage ? (
+                        <img src={p.primaryImage} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      ) : (
+                        <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, color: TL }}>🏞</div>
+                      )}
+                      {/* Badges */}
+                      <div style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 4 }}>
+                        {p.hasWalkthroughVideo && <span style={{ background: G, color: W, padding: "3px 7px", borderRadius: 5, fontSize: 8, fontWeight: 700 }}>WALKTHROUGH</span>}
+                        {isQueued && <span style={{ background: "#e0922f", color: W, padding: "3px 7px", borderRadius: 5, fontSize: 8, fontWeight: 700, animation: "s 2s linear infinite" }}>GENERATING</span>}
+                        {isFailed && <span style={{ background: "#b44040", color: W, padding: "3px 7px", borderRadius: 5, fontSize: 8, fontWeight: 700 }}>FAILED</span>}
+                        {isUploadFailed && <span style={{ background: "#d97706", color: W, padding: "3px 7px", borderRadius: 5, fontSize: 8, fontWeight: 700 }}>UPLOAD FAILED</span>}
+                      </div>
+                      {/* Batch checkbox */}
+                      <div onClick={(e) => { e.stopPropagation(); setVidSel(s => s.includes(p.id) ? s.filter(x => x !== p.id) : [...s, p.id]); }} style={{ position: "absolute", top: 8, left: 8, width: 20, height: 20, borderRadius: 5, border: `2px solid ${isSelected ? W : "rgba(255,255,255,0.5)"}`, background: isSelected ? G : "rgba(0,0,0,0.25)", display: "flex", alignItems: "center", justifyContent: "center", color: W, fontSize: 11, fontWeight: 900, cursor: "pointer" }}>{isSelected ? "✓" : ""}</div>
+                      {/* Media count */}
+                      {!p.hasSellerVideo && <div style={{ position: "absolute", bottom: 8, left: 8, background: "rgba(0,0,0,0.6)", color: W, padding: "2px 7px", borderRadius: 4, fontSize: 9, fontWeight: 600 }}>{p.imageCount} photos</div>}
+                    </div>
+                    {/* Info */}
+                    <div style={{ padding: "10px 12px" }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: TX, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginBottom: 3 }}>{p.title}</div>
+                      <div style={{ fontSize: 10, color: TL, marginBottom: 5 }}>{p.city}{p.state ? `, ${p.state}` : ""} · {p.type}</div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: 14, fontWeight: 800, color: G }}>{fmtPrice(p.price)}</span>
+                        <span style={{ fontSize: 10, color: TL }}>{fmtArea(p.area, p.area_unit)}</span>
+                      </div>
+                      {/* Quick pills */}
+                      <div style={{ display: "flex", gap: 3, marginTop: 6, flexWrap: "wrap" }}>
+                        {p.featureCount > 0 && <span style={{ background: "rgba(45,106,79,0.07)", color: G, padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 600 }}>{p.featureCount} features</span>}
+                        {p.sellerName !== "Unknown" && <span style={{ background: "rgba(139,111,71,0.07)", color: BN, padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 600 }}>{p.sellerName}</span>}
+                        {p.is_verified && <span style={{ background: "rgba(45,106,79,0.07)", color: G, padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 600 }}>✓ Verified</span>}
+                      </div>
+                    </div>
+                    {/* Expanded actions */}
+                    {expanded && <div style={{ padding: "8px 12px 12px", borderTop: `1px solid ${BR}` }}>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {/* Play seller video */}
+                        {p.hasSellerVideo && <button style={{ ...sB(), flex: 1, padding: "8px", fontSize: 11 }} onClick={(e) => { e.stopPropagation(); setVidPlayUrl(p.video_url); }}>▶ Seller Video</button>}
+                        {/* Generate walkthrough */}
+                        {!isQueued && !isFailed && !isUploadFailed && <button style={{ ...sB("p"), flex: 1, padding: "8px", fontSize: 11 }} onClick={(e) => { e.stopPropagation(); handleQueueSingle(p); }}>{p.hasWalkthroughVideo ? "↻ Regenerate" : "▶ Generate Walkthrough"}</button>}
+                        {/* Cancel */}
+                        {isQueued && <button style={{ ...sB("d"), flex: 1, padding: "8px", fontSize: 11 }} onClick={(e) => { e.stopPropagation(); handleCancelJob(p.id); }}>Cancel</button>}
+                        {/* Retry failed */}
+                        {isFailed && <button style={{ ...sB("p"), flex: 1, padding: "8px", fontSize: 11 }} onClick={(e) => { e.stopPropagation(); handleQueueSingle(p); }}>↻ Retry</button>}
+                        {/* Retry upload (free — no re-render) */}
+                        {isUploadFailed && <button style={{ ...sB("p"), flex: 1, padding: "8px", fontSize: 11 }} onClick={async (e) => { e.stopPropagation(); const r = await retryVideoUpload(p.id); if (r.error) flash(r.error, "err"); else flash("Retrying upload (no re-render)..."); loadVideoData(); }}>↻ Retry Upload (Free)</button>}
+                        {isUploadFailed && <button style={{ ...sB("d"), flex: 1, padding: "8px", fontSize: 11 }} onClick={(e) => { e.stopPropagation(); handleQueueSingle(p); }}>↻ Full Regenerate</button>}
+                      </div>
+                    </div>}
+                  </div>
+                );
+              })}
+              {vidProps.length === 0 && !vidLoad && <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: 40, color: TL, fontSize: 12 }}>No published properties found</div>}
+            </div>
+          </>}
+
+          {/* ═══ WALKTHROUGH VIDEOS GALLERY ═══ */}
+          {!vidLoad && vidView === "gallery" && <>
+            {vidHist.length === 0 && <div style={{ ...sC, textAlign: "center", padding: 40 }}>
+              <div style={{ fontSize: 36, marginBottom: 8, opacity: 0.4 }}>🎬</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: TX, marginBottom: 4 }}>No walkthrough videos yet</div>
+              <div style={{ fontSize: 11, color: TL, marginBottom: 14 }}>Generate your first Remotion walkthrough video from the Properties tab</div>
+              <button style={sB("p")} onClick={() => setVidView("properties")}>Go to Properties</button>
+            </div>}
+            {vidHist.length > 0 && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
+              {vidHist.map(h => (
+                <div key={h.id} style={{ background: W, border: `1px solid ${BR}`, borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                  {/* Thumbnail */}
+                  <div style={{ height: 160, background: "#1a3a27", position: "relative", overflow: "hidden", cursor: "pointer" }} onClick={() => h.video_url && setVidPlayUrl(h.video_url)}>
+                    {(h.video_thumbnail_url || h.primaryImage) ? <img src={h.video_thumbnail_url || h.primaryImage} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.85 }} /> : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontSize: 36, color: "rgba(255,255,255,0.3)" }}>▶</span></div>}
+                    {/* Play overlay */}
+                    <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.1)", opacity: 0, transition: "opacity 0.2s" }} onMouseEnter={e => e.currentTarget.style.opacity = 1} onMouseLeave={e => e.currentTarget.style.opacity = 0}>
+                      <div style={{ width: 48, height: 48, borderRadius: "50%", background: "rgba(255,255,255,0.9)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <span style={{ fontSize: 20, color: G, marginLeft: 3 }}>▶</span>
+                      </div>
+                    </div>
+                    {h.video_duration && <div style={{ position: "absolute", bottom: 8, right: 8, background: "rgba(0,0,0,0.7)", color: W, padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: 600 }}>{Math.round(h.video_duration)}s</div>}
+                    <span style={{ position: "absolute", top: 8, right: 8, background: "rgba(45,106,79,0.9)", color: W, padding: "3px 7px", borderRadius: 5, fontSize: 8, fontWeight: 700 }}>WALKTHROUGH</span>
+                  </div>
+                  {/* Info */}
+                  <div style={{ padding: "10px 12px" }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: TX, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginBottom: 3 }}>{h.title}</div>
+                    <div style={{ fontSize: 10, color: TL, marginBottom: 6 }}>{h.city} · {fmtPrice(h.price)} · {h.type}</div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: 9, color: TL }}>{h.video_generated_at ? timeSince(h.video_generated_at) : ""}</span>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        {h.video_url && <a href={h.video_url} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: G, fontWeight: 700, textDecoration: "none" }} onClick={e => e.stopPropagation()}>Download</a>}
+                        {h.video_url && <span style={{ fontSize: 10, color: TL, cursor: "pointer", fontWeight: 600 }} onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(h.video_url); flash("URL copied"); }}>Copy</span>}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>}
+          </>}
+
+          {/* ═══ VIDEO PLAYER LIGHTBOX ═══ */}
+          {vidPlayUrl && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={() => setVidPlayUrl(null)}>
+            <div style={{ position: "relative", maxWidth: 420, width: "100%" }} onClick={e => e.stopPropagation()}>
+              <video src={vidPlayUrl} controls autoPlay style={{ width: "100%", maxHeight: "80vh", borderRadius: 12, background: "#000" }} />
+              <button onClick={() => setVidPlayUrl(null)} style={{ position: "absolute", top: -40, right: 0, background: "rgba(255,255,255,0.2)", border: "none", color: W, fontSize: 20, width: 36, height: 36, borderRadius: "50%", cursor: "pointer", fontWeight: 700 }}>✕</button>
+            </div>
+          </div>}
         </>}
       </div>
 
