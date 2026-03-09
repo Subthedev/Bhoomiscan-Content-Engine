@@ -1,17 +1,20 @@
 /**
- * Frame timing constants at 30fps for a 30-second video (900 total frames).
+ * Frame timing constants at 30fps.
  *
  * Video structure (professional real estate showcase):
- * 1. IntroHook (0-3s)       — Attention grab: price + location + type
- * 2. PhotoShowcase (3-13s)  — Ken Burns through seller photos with overlay details
- * 3. VideoWalkthrough (13-20s) — Seller's actual video clip if available, else more photos
- * 4. DetailsCard (20-25s)   — Features grid + price breakdown
- * 5. SellerCTA (25-28s)     — Seller info + contact CTA
- * 6. EndCard (28-30s)       — BhoomiScan branding + listing URL
+ * 1. IntroHook (0-3s)         — Attention grab: price + location + type
+ * 2. MapSequence (3-9s)       — Cinematic satellite zoom (if geo data available)
+ * 3. PhotoShowcase (9-19s)    — Ken Burns through seller photos with overlay details
+ * 4. VideoWalkthrough (19-26s) — Seller's actual video clip if available, else more photos
+ * 5. DetailsCard (26-31s)     — Features grid + price breakdown
+ * 6. SellerCTA (31-34s)       — Seller info + contact CTA
+ * 7. EndCard (34-36s)         — BhoomiScan branding + listing URL
+ *
+ * Without geo data, MapSequence is skipped → original 30s structure.
  */
 
 export const FPS = 30;
-export const TOTAL_DURATION = 30; // seconds
+export const TOTAL_DURATION = 30; // seconds (default without map)
 export const TOTAL_FRAMES = FPS * TOTAL_DURATION; // 900
 
 export const SECTIONS = {
@@ -36,6 +39,7 @@ import type { TimedVoiceover } from "../voiceover/generateVoiceover";
 
 export interface DynamicSections {
   introHook: { from: number; duration: number };
+  mapSequence?: { from: number; duration: number };
   photoShowcase: { from: number; duration: number };
   videoWalkthrough: { from: number; duration: number };
   detailsCard: { from: number; duration: number };
@@ -44,20 +48,22 @@ export interface DynamicSections {
 }
 
 /** Minimum frames per section */
-const MIN_FRAMES = {
+const MIN_FRAMES: Record<string, number> = {
   introHook: 75,         // 2.5s
+  mapSequence: 270,      // 9s (two-phase: zoom-in + zoom-out with amenities)
   photoShowcase: 240,    // 8s
   videoWalkthrough: 150, // 5s
   detailsCard: 120,      // 4s
   sellerCTA: 75,         // 2.5s
   endCard: 45,           // 1.5s
-} as const;
+};
 
 const PADDING_FRAMES = 15;
 
 /** Section ID to video section mapping */
-const SECTION_MAP: Record<string, keyof typeof MIN_FRAMES> = {
+const SECTION_MAP: Record<string, string> = {
   hook: "introHook",
+  map: "mapSequence",
   details: "photoShowcase",
   context: "videoWalkthrough",
   numbers: "detailsCard",
@@ -65,24 +71,45 @@ const SECTION_MAP: Record<string, keyof typeof MIN_FRAMES> = {
   branding: "endCard",
 };
 
-/** Max total frames for rich content (35s) */
-const MAX_FRAMES_RICH = 35 * FPS; // 1050
+/** Max total frames: 44s for geo+amenities, 40s for geo, 35s for rich, 30s default */
+const MAX_FRAMES_GEO_AMENITY = 50 * FPS; // 1500
+const MAX_FRAMES_GEO = 40 * FPS;   // 1200
+const MAX_FRAMES_RICH = 35 * FPS;  // 1050
+
+/** Section ordering for layout computation */
+const SECTION_ORDER = [
+  "introHook",
+  "mapSequence",
+  "photoShowcase",
+  "videoWalkthrough",
+  "detailsCard",
+  "sellerCTA",
+  "endCard",
+] as const;
 
 /**
  * Compute dynamic section timings from voiceover timing estimates.
  * Each section = max(minimumFrames, ceil(estimatedDurationMs / 1000 * FPS) + padding)
  *
  * Content-aware redistributions:
- * - Few photos (≤2): shrink photoShowcase, grow detailsCard
+ * - Few photos (<=2): shrink photoShowcase, grow detailsCard
  * - No video: reduce videoWalkthrough, redistribute to photoShowcase + detailsCard
- * - Rich content (5+ photos or video): allow up to 35s total
+ * - Geo data available: insert mapSequence (6s default) between introHook and photoShowcase
+ * - Rich content + geo: allow up to 40s total
  */
 export function computeDynamicSections(
   sectionEstimates: TimedVoiceover["sectionEstimates"],
   richness: ContentRichness
 ): { sections: DynamicSections; totalFrames: number } {
-  const durations: Record<keyof typeof MIN_FRAMES, number> = {
+  const hasGeo = richness.geoTier !== "none";
+
+  const durations: Record<string, number> = {
     introHook: MIN_FRAMES.introHook,
+    mapSequence: hasGeo
+      ? (richness.hasAmenities
+        ? Math.min(5 + (richness.amenityCount || 3) * 2.5, 18) * FPS
+        : 6 * FPS)
+      : 0,
     photoShowcase: MIN_FRAMES.photoShowcase,
     videoWalkthrough: MIN_FRAMES.videoWalkthrough,
     detailsCard: MIN_FRAMES.detailsCard,
@@ -93,16 +120,25 @@ export function computeDynamicSections(
   // Map voiceover sections to video sections
   for (const est of sectionEstimates) {
     const sectionKey = SECTION_MAP[est.sectionId];
-    if (sectionKey) {
+    if (sectionKey && sectionKey !== "mapSequence") {
       const durationMs = est.estimatedEndMs - est.estimatedStartMs;
       const frames = Math.ceil((durationMs / 1000) * FPS) + PADDING_FRAMES;
-      durations[sectionKey] = Math.max(MIN_FRAMES[sectionKey], frames);
+      durations[sectionKey] = Math.max(MIN_FRAMES[sectionKey] || 0, frames);
+    }
+  }
+
+  // Handle map voiceover section if present
+  if (hasGeo) {
+    const mapEst = sectionEstimates.find((e) => e.sectionId === "map");
+    if (mapEst) {
+      const durationMs = mapEst.estimatedEndMs - mapEst.estimatedStartMs;
+      const frames = Math.ceil((durationMs / 1000) * FPS) + PADDING_FRAMES;
+      durations.mapSequence = Math.max(MIN_FRAMES.mapSequence, frames);
     }
   }
 
   // Content-aware redistributions
   if (richness.photoCount <= 2) {
-    // Few photos — shrink photoShowcase by 30%, boost detailsCard
     const reduction = Math.round(durations.photoShowcase * 0.3);
     durations.photoShowcase -= reduction;
     durations.photoShowcase = Math.max(MIN_FRAMES.photoShowcase, durations.photoShowcase);
@@ -110,11 +146,9 @@ export function computeDynamicSections(
   }
 
   if (!richness.hasVideo) {
-    // No video — reduce videoWalkthrough to minimum, redistribute
     const excess = durations.videoWalkthrough - MIN_FRAMES.videoWalkthrough;
     if (excess > 0) {
       durations.videoWalkthrough = MIN_FRAMES.videoWalkthrough;
-      // 60% to photoShowcase, 40% to detailsCard
       durations.photoShowcase += Math.round(excess * 0.6);
       durations.detailsCard += Math.round(excess * 0.4);
     }
@@ -131,20 +165,47 @@ export function computeDynamicSections(
     endCard: { from: 0, duration: durations.endCard },
   };
 
-  for (const key of ["introHook", "photoShowcase", "videoWalkthrough", "detailsCard", "sellerCTA", "endCard"] as const) {
-    sections[key].from = from;
-    from += sections[key].duration;
+  // Insert mapSequence only if geo data available
+  if (hasGeo && durations.mapSequence > 0) {
+    sections.mapSequence = { from: 0, duration: durations.mapSequence };
   }
 
-  // Rich content: allow up to 35s total
-  const maxFrames = richness.tier === "rich" ? MAX_FRAMES_RICH : TOTAL_FRAMES;
+  for (const key of SECTION_ORDER) {
+    if (key === "mapSequence" && (!hasGeo || durations.mapSequence === 0)) continue;
+    if (key === "mapSequence" && sections.mapSequence) {
+      sections.mapSequence.from = from;
+      from += sections.mapSequence.duration;
+    } else if (key in sections && key !== "mapSequence") {
+      (sections as any)[key].from = from;
+      from += (sections as any)[key].duration;
+    }
+  }
+
+  // Max frames: geo+amenities 44s, geo 40s, rich 35s, default 30s
+  let maxFrames = TOTAL_FRAMES;
+  if (hasGeo && richness.hasAmenities) {
+    maxFrames = MAX_FRAMES_GEO_AMENITY;
+  } else if (hasGeo) {
+    maxFrames = MAX_FRAMES_GEO;
+  } else if (richness.tier === "rich") {
+    maxFrames = MAX_FRAMES_RICH;
+  }
+
   if (from > maxFrames) {
-    // Scale all sections proportionally to fit
     const scale = maxFrames / from;
     let newFrom = 0;
-    for (const key of ["introHook", "photoShowcase", "videoWalkthrough", "detailsCard", "sellerCTA", "endCard"] as const) {
-      const newDuration = Math.max(MIN_FRAMES[key], Math.round(sections[key].duration * scale));
-      sections[key] = { from: newFrom, duration: newDuration };
+    for (const key of SECTION_ORDER) {
+      if (key === "mapSequence") {
+        if (sections.mapSequence) {
+          const newDuration = Math.max(MIN_FRAMES.mapSequence, Math.round(sections.mapSequence.duration * scale));
+          sections.mapSequence = { from: newFrom, duration: newDuration };
+          newFrom += newDuration;
+        }
+        continue;
+      }
+      const minF = MIN_FRAMES[key] || 45;
+      const newDuration = Math.max(minF, Math.round((sections as any)[key].duration * scale));
+      (sections as any)[key] = { from: newFrom, duration: newDuration };
       newFrom += newDuration;
     }
     from = newFrom;

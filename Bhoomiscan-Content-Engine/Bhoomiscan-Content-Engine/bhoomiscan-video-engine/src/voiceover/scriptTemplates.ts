@@ -5,6 +5,7 @@
 
 import { ListingVideoProps } from "../types";
 import { ContentRichness } from "../analysis/contentAnalyzer";
+import type { GeoData } from "../geo/types";
 
 export interface ScriptSection {
   sectionId: string;
@@ -120,6 +121,29 @@ function generateBranding(): ScriptSection {
   return { sectionId: "branding", text, estimatedDurationMs: estimateDuration(text) };
 }
 
+function generateMapNarration(
+  props: ListingVideoProps,
+  richness: ContentRichness
+): ScriptSection | null {
+  if (richness.geoTier === "none") return null;
+
+  const geoData = props.geoData as GeoData | undefined;
+  let text: string;
+
+  if (geoData?.amenities && geoData.amenities.length >= 2) {
+    const sorted = geoData.amenities.slice(0, 3);
+    const mentions = sorted.map((a) => `${a.label} ${a.distanceKm}km`).join(", ");
+    text = `Dekhantu, ${props.city} re eha plot ra location. Paase re ${mentions} achhi. Badhia connectivity!`;
+  } else if (richness.geoTier === "full" && geoData?.landmarks && geoData.landmarks.length > 0) {
+    const landmark = geoData.landmarks[0];
+    text = `Dekhantu, ${props.city} re ${props.area} ra location. ${landmark.name} tharu ${landmark.distanceKm} km paase.`;
+  } else {
+    text = `Eha plot ${props.city}, ${props.state} re achhi. Badhia location.`;
+  }
+
+  return { sectionId: "map", text, estimatedDurationMs: estimateDuration(text) };
+}
+
 /**
  * Generate an intelligent script composed of sections, each with timing estimates.
  */
@@ -127,8 +151,10 @@ export function generateIntelligentScript(
   props: ListingVideoProps,
   richness: ContentRichness
 ): ScriptSection[] {
+  const mapSection = generateMapNarration(props, richness);
   const sections = [
     generateHook(props, richness),
+    ...(mapSection ? [mapSection] : []),
     generateDetails(props, richness),
     generateContext(props, richness),
     generateNumbers(props),
