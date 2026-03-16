@@ -25,16 +25,36 @@ import { renderMedia, selectComposition } from "@remotion/renderer";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import * as path from "path";
 import * as fs from "fs";
+import webpack from "webpack";
 import { mapPropertyToVideoProps, VideoVariant, ListingVideoProps } from "./types";
-import { generateVoiceover, cleanupVoiceover, generateTimedVoiceover } from "./voiceover/generateVoiceover";
+import { generateVoiceover, cleanupVoiceover, generateTimedVoiceover } from "./voiceover/generateVoiceoverAzure";
 import { uploadAndUpdateProperty, retryUploadFromLocal } from "./upload";
 import { analyzeContent } from "./analysis/contentAnalyzer";
 import { selectAndOrderPhotos } from "./analysis/photoSelector";
 import { analyzeVideo } from "./analysis/videoAnalyzer";
+import { extractGeoData } from "./geo/geoExtractor";
 import { computeDynamicSections, FPS } from "./utils/timing";
 
 const ENTRY_POINT = path.join(__dirname, "..", "src", "index.ts");
 const OUTPUT_DIR = path.join(__dirname, "..", "output");
+
+/** Webpack override to inject env vars into the browser bundle */
+function webpackOverride(config: webpack.Configuration): webpack.Configuration {
+  return {
+    ...config,
+    plugins: [
+      ...(config.plugins || []),
+      new webpack.DefinePlugin({
+        "process.env.MAPBOX_ACCESS_TOKEN": JSON.stringify(
+          process.env.MAPBOX_ACCESS_TOKEN || ""
+        ),
+      }),
+    ],
+  };
+}
+
+/** Chrome flags for WebGL support (required by Mapbox GL) */
+const CHROMIUM_OPTIONS = { gl: "angle" as const };
 
 export interface PipelineOptions {
   variant?: VideoVariant;
@@ -161,14 +181,23 @@ export async function generatePropertyVideo(
       // ── 3. Map to video props ──
       let inputProps = mapPropertyToVideoProps(property, variant);
 
-      // ── 4. Analyze content + photo selection (parallel, free) ──
-      const richness = analyzeContent(inputProps);
-      console.log(`[pipeline] Content: tier=${richness.tier}, photos=${richness.photoCount}, features=${richness.featureCount}, price=${richness.priceRange}`);
-
-      const [photoResult, videoSegment] = await Promise.all([
+      // ── 4. Analyze content + photo selection + geo extraction (parallel, free) ──
+      const [photoResult, videoSegment, geoData] = await Promise.all([
         selectAndOrderPhotos(inputProps.photos),
         inputProps.videoUrl ? analyzeVideo(inputProps.videoUrl) : Promise.resolve(null),
+        process.env.MAPBOX_ACCESS_TOKEN ? extractGeoData(inputProps, supabase) : Promise.resolve(null),
       ]);
+
+      // Merge geo data into props (before analyzeContent so it sees geoData)
+      if (geoData) {
+        inputProps = { ...inputProps, geoData };
+        console.log(`[pipeline] Geo: confidence=${geoData.confidence}, landmarks=${geoData.landmarks.length}, amenities=${geoData.amenities?.length || 0}, boundaries=${geoData.boundaries.length}`);
+      } else if (!process.env.MAPBOX_ACCESS_TOKEN) {
+        console.log("[pipeline] Geo: skipped (no MAPBOX_ACCESS_TOKEN)");
+      }
+
+      const richness = analyzeContent(inputProps);
+      console.log(`[pipeline] Content: tier=${richness.tier}, geo=${richness.geoTier}, photos=${richness.photoCount}, features=${richness.featureCount}, price=${richness.priceRange}`);
 
       inputProps = { ...inputProps, photos: photoResult.ordered };
       if (photoResult.scores.length > 0) {
@@ -182,8 +211,8 @@ export async function generatePropertyVideo(
       // ── 5. Generate voiceover (SINGLE API call — cost-effective) ──
       let voiceoverPath: string | null = null;
       if (!skipVoiceover) {
-        console.log("[pipeline] Generating Odia voiceover...");
-        // Try timed voiceover first (uses intelligent templates)
+        console.log("[pipeline] Generating Hindi voiceover (Azure TTS → edge-tts fallback)...");
+        // Try timed voiceover first (uses intelligent templates + per-section SSML prosody)
         const timedVO = await generateTimedVoiceover(inputProps, richness);
         if (timedVO) {
           voiceoverPath = timedVO.filename;
@@ -193,23 +222,32 @@ export async function generatePropertyVideo(
           totalFrames = tf;
           console.log(`[pipeline] Dynamic timing: ${tf} frames (${(tf / FPS).toFixed(1)}s)`);
         } else {
-          // Timed failed — use legacy BUT ONLY if timed returned null due to
-          // missing API key (not a network error that already spent the API call)
-          if (!process.env.SARVAM_API_KEY) {
-            console.log("[pipeline] Voiceover skipped (no SARVAM_API_KEY)");
-          } else {
-            // The timed call already used the API key and failed at parsing/file level.
-            // Do NOT call legacy — that would be a second paid API call for the same result.
-            console.log("[pipeline] Timed voiceover failed — skipping to avoid double API cost");
-          }
+          console.log("[pipeline] Timed voiceover failed — check edge-tts/ffmpeg installation");
         }
+      }
+
+      // ── 5b. Compute dynamic timings if not already done (geo needs map section even without voiceover) ──
+      if (!inputProps.sectionTimings && richness.geoTier !== "none") {
+        const defaultEstimates = [
+          { sectionId: "hook", estimatedStartMs: 0, estimatedEndMs: 2500 },
+          { sectionId: "map", estimatedStartMs: 2500, estimatedEndMs: 8000 },
+          { sectionId: "details", estimatedStartMs: 8000, estimatedEndMs: 16000 },
+          { sectionId: "context", estimatedStartMs: 16000, estimatedEndMs: 22000 },
+          { sectionId: "numbers", estimatedStartMs: 22000, estimatedEndMs: 27000 },
+          { sectionId: "cta", estimatedStartMs: 27000, estimatedEndMs: 30000 },
+          { sectionId: "branding", estimatedStartMs: 30000, estimatedEndMs: 32000 },
+        ];
+        const { sections, totalFrames: tf } = computeDynamicSections(defaultEstimates, richness);
+        inputProps = { ...inputProps, sectionTimings: sections, totalFrames: tf };
+        totalFrames = tf;
+        console.log(`[pipeline] Dynamic timing (no-voiceover fallback): ${tf} frames (${(tf / FPS).toFixed(1)}s)`);
       }
 
       // ── 6. Render video ──
       console.log("[pipeline] Bundling Remotion project...");
       const bundled = options.sharedBundlePath || await bundle({
         entryPoint: ENTRY_POINT,
-        webpackOverride: (c) => c,
+        webpackOverride,
       });
 
       console.log("[pipeline] Rendering video...");
@@ -217,6 +255,7 @@ export async function generatePropertyVideo(
         serveUrl: bundled,
         id: "ListingVideo",
         inputProps,
+        chromiumOptions: CHROMIUM_OPTIONS,
       });
 
       await renderMedia({
@@ -228,6 +267,9 @@ export async function generatePropertyVideo(
         imageFormat: "jpeg",
         jpegQuality: 90,
         crf: 28,
+        chromiumOptions: CHROMIUM_OPTIONS,
+        timeoutInMilliseconds: 30000, // Allow extra time for Mapbox tile loading per frame
+        concurrency: 1, // Prevent multiple frames competing for tile bandwidth
       });
 
       // Clean up voiceover temp file (audio is baked into the MP4 now)
@@ -345,7 +387,7 @@ export async function generateAllPendingVideos(
   console.log("[pipeline] Bundling Remotion project (shared)...");
   const bundled = await bundle({
     entryPoint: ENTRY_POINT,
-    webpackOverride: (c) => c,
+    webpackOverride,
   });
 
   const results: PipelineResult[] = [];

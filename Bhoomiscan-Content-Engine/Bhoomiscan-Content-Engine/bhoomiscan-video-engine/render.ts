@@ -3,9 +3,12 @@ import { renderMedia, selectComposition } from "@remotion/renderer";
 import { createClient } from "@supabase/supabase-js";
 import * as path from "path";
 import * as fs from "fs";
+import webpack from "webpack";
 import { config } from "dotenv";
 import { mapPropertyToVideoProps, VideoVariant, ListingVideoProps } from "./src/types";
 import { generateVoiceover, cleanupVoiceover } from "./src/voiceover/generateVoiceover";
+import { analyzeContent } from "./src/analysis/contentAnalyzer";
+import { computeDynamicSections, FPS } from "./src/utils/timing";
 import { sampleProperty } from "./src/fixtures/sampleProperty";
 
 config();
@@ -27,6 +30,23 @@ async function renderProperty(options: RenderOptions): Promise<string> {
   if (propertyId === "test") {
     console.log("[render] Using sample test property");
     inputProps = { ...sampleProperty, variant };
+
+    // Compute dynamic timings for test mode (so map+amenity section gets proper frame allocation)
+    if (inputProps.geoData) {
+      const richness = analyzeContent(inputProps);
+      const defaultEstimates = [
+        { sectionId: "hook", estimatedStartMs: 0, estimatedEndMs: 2500 },
+        { sectionId: "map", estimatedStartMs: 2500, estimatedEndMs: 12000 },
+        { sectionId: "details", estimatedStartMs: 12000, estimatedEndMs: 20000 },
+        { sectionId: "context", estimatedStartMs: 20000, estimatedEndMs: 26000 },
+        { sectionId: "numbers", estimatedStartMs: 26000, estimatedEndMs: 31000 },
+        { sectionId: "cta", estimatedStartMs: 31000, estimatedEndMs: 34000 },
+        { sectionId: "branding", estimatedStartMs: 34000, estimatedEndMs: 36000 },
+      ];
+      const { sections, totalFrames } = computeDynamicSections(defaultEstimates, richness);
+      inputProps = { ...inputProps, sectionTimings: sections, totalFrames };
+      console.log(`[render] Dynamic timing: ${totalFrames} frames (${(totalFrames / FPS).toFixed(1)}s), hasAmenities=${richness.hasAmenities}`);
+    }
   } else {
     console.log(`[render] Fetching property ${propertyId} from Supabase...`);
     inputProps = await fetchProperty(propertyId, variant);
@@ -55,14 +75,27 @@ async function renderProperty(options: RenderOptions): Promise<string> {
   console.log("[render] Bundling Remotion project...");
   const bundled = await bundle({
     entryPoint: ENTRY_POINT,
-    webpackOverride: (config) => config,
+    webpackOverride: (c) => ({
+      ...c,
+      plugins: [
+        ...(c.plugins || []),
+        new webpack.DefinePlugin({
+          "process.env.MAPBOX_ACCESS_TOKEN": JSON.stringify(
+            process.env.MAPBOX_ACCESS_TOKEN || ""
+          ),
+        }),
+      ],
+    }),
   });
+
+  const chromiumOptions = { gl: "angle" as const };
 
   console.log("[render] Selecting composition...");
   const composition = await selectComposition({
     serveUrl: bundled,
     id: "ListingVideo",
     inputProps,
+    chromiumOptions,
   });
 
   console.log("[render] Rendering video...");
@@ -74,7 +107,9 @@ async function renderProperty(options: RenderOptions): Promise<string> {
     inputProps,
     imageFormat: "jpeg",
     jpegQuality: 90,
-    crf: 28,
+    crf: 30,
+    chromiumOptions,
+    concurrency: 1, // Sequential frames — prevents Mapbox tile race conditions
   });
 
   console.log(`[render] Done! Output: ${outputPath}`);

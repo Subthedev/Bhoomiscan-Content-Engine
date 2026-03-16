@@ -3,10 +3,9 @@ import react from '@vitejs/plugin-react'
 import { spawn } from 'child_process'
 import path from 'path'
 
-// ── Video Engine paths (absolute — these projects live in different directories) ──
-const HOME = process.env.HOME || '/Users/naveenpattnaik';
-const VIDEO_ENGINE_DIR = path.join(HOME, 'bhoomiscan-insights', 'bhoomiscan-video-engine');
-const MAIN_ENV_PATH = path.join(HOME, 'bhoomiscan-insights', '.env');
+// ── Video Engine paths (sibling directory in the same repo) ──
+const VIDEO_ENGINE_DIR = path.resolve(__dirname, '..', 'bhoomiscan-video-engine');
+const MAIN_ENV_PATH = path.resolve(__dirname, '..', 'bhoomiscan-video-engine', '.env');
 
 /**
  * Vite plugin that embeds a video generation API directly into the dev server.
@@ -67,7 +66,7 @@ function videoEnginePlugin() {
 
       // ── Spawn helper (shared by generate and retry-upload) ──
       function spawnJob(propertyId, args, jobLabel) {
-        console.log(`\n[video-engine] ${jobLabel}: npx ${args.join(' ')}`);
+        console.log(`\n[video-engine] ${jobLabel}: node ${args.join(' ')}`);
         console.log(`[video-engine] CWD: ${VIDEO_ENGINE_DIR}`);
 
         const job = {
@@ -79,9 +78,9 @@ function videoEnginePlugin() {
         activeJobs.set(propertyId, job);
 
         try {
-          const child = spawn('npx', args, {
+          const child = spawn('node', args, {
             cwd: VIDEO_ENGINE_DIR,
-            shell: true,
+            shell: false,
             env: {
               ...process.env,
               DOTENV_CONFIG_PATH: MAIN_ENV_PATH,
@@ -150,7 +149,8 @@ function videoEnginePlugin() {
           return json(res, 409, { error: 'Already generating for this property' });
         }
 
-        const args = ['tsx', 'generate.ts', `--id=${propertyId}`];
+        const tsxPath = path.join(VIDEO_ENGINE_DIR, 'node_modules', 'tsx', 'dist', 'cli.mjs');
+        const args = [tsxPath, 'generate.ts', `--id=${propertyId}`];
         if (options?.skipVoiceover) args.push('--no-voiceover');
         if (options?.skipUpload) args.push('--no-upload');
         if (options?.variant) args.push(`--variant=${options.variant}`);
@@ -177,7 +177,8 @@ function videoEnginePlugin() {
 
         if (!propertyId) return json(res, 400, { error: 'propertyId is required' });
 
-        const args = ['tsx', 'generate.ts', '--retry-upload', `--id=${propertyId}`];
+        const retryTsxPath = path.join(VIDEO_ENGINE_DIR, 'node_modules', 'tsx', 'dist', 'cli.mjs');
+        const args = [retryTsxPath, 'generate.ts', '--retry-upload', `--id=${propertyId}`];
         json(res, 202, { ok: true, message: 'Retrying upload (no re-render)', propertyId });
         spawnJob(propertyId, args, 'Retry upload');
       });

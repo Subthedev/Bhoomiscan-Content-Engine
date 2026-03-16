@@ -10,23 +10,31 @@
     "generate:test": "npx tsx generate.ts --id=dca74421-7b18-4341-b1d6-f3c23ff1cf36 --no-voiceover --no-upload",
     "render": "npx tsx render.ts",
     "render:test": "npx tsx render.ts --property-id=test --no-voiceover",
-    "voiceover:test": "npx tsx src/voiceover/generateVoiceover.ts --test"
+    "voiceover:test": "npx tsx src/voiceover/generateVoiceover.ts --test",
+    "voiceover:edge:test": "npx tsx src/voiceover/generateVoiceoverEdge.ts --test",
+    "voiceover:azure:test": "npx tsx src/voiceover/generateVoiceoverAzure.ts --test",
+    "avatar:test": "npx tsx src/avatar/generateAvatar.ts --test"
   },
   "dependencies": {
+    "@andresaya/edge-tts": "^1.8.0",
     "@remotion/cli": "4.0.242",
     "@remotion/google-fonts": "4.0.242",
     "@remotion/renderer": "4.0.242",
     "@supabase/supabase-js": "^2.49.1",
+    "@types/mapbox-gl": "^3.4.1",
     "dotenv": "^16.4.7",
+    "mapbox-gl": "^3.19.1",
+    "microsoft-cognitiveservices-speech-sdk": "^1.48.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-map-gl": "^8.1.0",
     "remotion": "4.0.242",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
-    "tsx": "^4.19.2",
+    "tsx": "^4.21.0",
     "typescript": "^5.8.3"
   }
 }

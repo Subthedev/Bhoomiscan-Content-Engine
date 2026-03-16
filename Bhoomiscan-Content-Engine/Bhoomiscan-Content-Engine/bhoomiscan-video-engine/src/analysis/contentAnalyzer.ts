@@ -1,4 +1,5 @@
 import { ListingVideoProps } from "../types";
+import type { GeoTier } from "../geo/types";
 
 export type PriceRange = "budget" | "mid" | "premium" | "luxury";
 export type ContentTier = "minimal" | "standard" | "rich";
@@ -11,6 +12,10 @@ export interface ContentRichness {
   hasDescription: boolean;
   hasLandmarks: boolean;
   priceRange: PriceRange;
+  hasGeoData: boolean;
+  geoTier: GeoTier;
+  hasAmenities: boolean;
+  amenityCount: number;
 }
 
 const LAKH = 100_000;
@@ -44,6 +49,13 @@ export function analyzeContent(props: ListingVideoProps): ContentRichness {
     tier = "standard";
   }
 
+  // Determine geo tier based on geoData presence and confidence
+  const geoData = props.geoData;
+  let geoTier: GeoTier = "none";
+  if (geoData) {
+    geoTier = geoData.confidence === "low" ? "partial" : "full";
+  }
+
   return {
     tier,
     photoCount,
@@ -52,5 +64,9 @@ export function analyzeContent(props: ListingVideoProps): ContentRichness {
     hasDescription: !!props.description && props.description.length > 10,
     hasLandmarks: props.landmarks.length > 0,
     priceRange: getPriceRange(props.price),
+    hasGeoData: !!geoData,
+    geoTier,
+    hasAmenities: !!geoData?.amenities && geoData.amenities.length >= 2,
+    amenityCount: geoData?.amenities?.length || 0,
   };
 }

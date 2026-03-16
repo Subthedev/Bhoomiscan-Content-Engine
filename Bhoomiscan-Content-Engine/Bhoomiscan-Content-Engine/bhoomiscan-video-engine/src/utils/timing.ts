@@ -33,9 +33,15 @@ export const toSeconds = (frames: number) => frames / FPS;
 
 import type { ContentRichness } from "../analysis/contentAnalyzer";
 import type { TimedVoiceover } from "../voiceover/generateVoiceover";
+import {
+  ZOOM_IN_SECONDS,
+  ZOOM_OUT_SECONDS,
+  RIDE_SECONDS,
+} from "../geo/mapAnimations";
 
 export interface DynamicSections {
   introHook: { from: number; duration: number };
+  mapSequence?: { from: number; duration: number };
   photoShowcase: { from: number; duration: number };
   videoWalkthrough: { from: number; duration: number };
   detailsCard: { from: number; duration: number };
@@ -46,6 +52,7 @@ export interface DynamicSections {
 /** Minimum frames per section */
 const MIN_FRAMES = {
   introHook: 75,         // 2.5s
+  mapSequence: 270,      // 9s minimum
   photoShowcase: 240,    // 8s
   videoWalkthrough: 150, // 5s
   detailsCard: 120,      // 4s
@@ -65,8 +72,9 @@ const SECTION_MAP: Record<string, keyof typeof MIN_FRAMES> = {
   branding: "endCard",
 };
 
-/** Max total frames for rich content (35s) */
+/** Max total frames for rich content (35s), with geo+amenity up to 52s */
 const MAX_FRAMES_RICH = 35 * FPS; // 1050
+const MAX_FRAMES_GEO_AMENITY = 52 * FPS; // 1560
 
 /**
  * Compute dynamic section timings from voiceover timing estimates.
@@ -81,7 +89,7 @@ export function computeDynamicSections(
   sectionEstimates: TimedVoiceover["sectionEstimates"],
   richness: ContentRichness
 ): { sections: DynamicSections; totalFrames: number } {
-  const durations: Record<keyof typeof MIN_FRAMES, number> = {
+  const durations: Record<string, number> = {
     introHook: MIN_FRAMES.introHook,
     photoShowcase: MIN_FRAMES.photoShowcase,
     videoWalkthrough: MIN_FRAMES.videoWalkthrough,
@@ -96,13 +104,15 @@ export function computeDynamicSections(
     if (sectionKey) {
       const durationMs = est.estimatedEndMs - est.estimatedStartMs;
       const frames = Math.ceil((durationMs / 1000) * FPS) + PADDING_FRAMES;
-      durations[sectionKey] = Math.max(MIN_FRAMES[sectionKey], frames);
+      durations[sectionKey] = Math.max(
+        MIN_FRAMES[sectionKey as keyof typeof MIN_FRAMES] || 0,
+        frames
+      );
     }
   }
 
   // Content-aware redistributions
   if (richness.photoCount <= 2) {
-    // Few photos — shrink photoShowcase by 30%, boost detailsCard
     const reduction = Math.round(durations.photoShowcase * 0.3);
     durations.photoShowcase -= reduction;
     durations.photoShowcase = Math.max(MIN_FRAMES.photoShowcase, durations.photoShowcase);
@@ -110,17 +120,28 @@ export function computeDynamicSections(
   }
 
   if (!richness.hasVideo) {
-    // No video — reduce videoWalkthrough to minimum, redistribute
     const excess = durations.videoWalkthrough - MIN_FRAMES.videoWalkthrough;
     if (excess > 0) {
       durations.videoWalkthrough = MIN_FRAMES.videoWalkthrough;
-      // 60% to photoShowcase, 40% to detailsCard
       durations.photoShowcase += Math.round(excess * 0.6);
       durations.detailsCard += Math.round(excess * 0.4);
     }
   }
 
-  // Compute cumulative `from` values
+  // ── MapSequence duration: dynamic based on amenity count ──
+  const hasGeo = richness.hasGeoData && richness.geoTier !== "none";
+  let mapDuration = 0;
+  if (hasGeo) {
+    if (richness.hasAmenities) {
+      mapDuration =
+        (ZOOM_IN_SECONDS + ZOOM_OUT_SECONDS + richness.amenityCount * RIDE_SECONDS) * FPS;
+    } else {
+      mapDuration = 6 * FPS; // no amenities: simple 6s zoom
+    }
+    mapDuration = Math.max(MIN_FRAMES.mapSequence, mapDuration);
+  }
+
+  // Compute cumulative `from` values (introHook → mapSequence → photoShowcase → ...)
   let from = 0;
   const sections: DynamicSections = {
     introHook: { from: 0, duration: durations.introHook },
@@ -131,19 +152,55 @@ export function computeDynamicSections(
     endCard: { from: 0, duration: durations.endCard },
   };
 
-  for (const key of ["introHook", "photoShowcase", "videoWalkthrough", "detailsCard", "sellerCTA", "endCard"] as const) {
+  // IntroHook
+  sections.introHook.from = from;
+  from += sections.introHook.duration;
+
+  // MapSequence (inserted after IntroHook, before PhotoShowcase)
+  if (mapDuration > 0) {
+    sections.mapSequence = { from, duration: mapDuration };
+    from += mapDuration;
+  }
+
+  // Remaining sections
+  for (const key of ["photoShowcase", "videoWalkthrough", "detailsCard", "sellerCTA", "endCard"] as const) {
     sections[key].from = from;
     from += sections[key].duration;
   }
 
-  // Rich content: allow up to 35s total
-  const maxFrames = richness.tier === "rich" ? MAX_FRAMES_RICH : TOTAL_FRAMES;
+  // Determine max allowed frames
+  const hasGeoAmenity = hasGeo && richness.hasAmenities;
+  const maxFrames = hasGeoAmenity
+    ? MAX_FRAMES_GEO_AMENITY
+    : richness.tier === "rich"
+      ? MAX_FRAMES_RICH
+      : TOTAL_FRAMES;
+
   if (from > maxFrames) {
-    // Scale all sections proportionally to fit
-    const scale = maxFrames / from;
+    // Scale non-map sections proportionally to fit
+    const mapFrames = sections.mapSequence?.duration || 0;
+    const nonMapTotal = from - mapFrames;
+    const targetNonMap = maxFrames - mapFrames;
+    const scale = targetNonMap / nonMapTotal;
+
     let newFrom = 0;
-    for (const key of ["introHook", "photoShowcase", "videoWalkthrough", "detailsCard", "sellerCTA", "endCard"] as const) {
-      const newDuration = Math.max(MIN_FRAMES[key], Math.round(sections[key].duration * scale));
+    sections.introHook = {
+      from: newFrom,
+      duration: Math.max(MIN_FRAMES.introHook, Math.round(sections.introHook.duration * scale)),
+    };
+    newFrom += sections.introHook.duration;
+
+    if (sections.mapSequence) {
+      sections.mapSequence.from = newFrom;
+      newFrom += sections.mapSequence.duration;
+    }
+
+    for (const key of ["photoShowcase", "videoWalkthrough", "detailsCard", "sellerCTA", "endCard"] as const) {
+      const minKey = key as keyof typeof MIN_FRAMES;
+      const newDuration = Math.max(
+        MIN_FRAMES[minKey] || 0,
+        Math.round(sections[key].duration * scale)
+      );
       sections[key] = { from: newFrom, duration: newDuration };
       newFrom += newDuration;
     }

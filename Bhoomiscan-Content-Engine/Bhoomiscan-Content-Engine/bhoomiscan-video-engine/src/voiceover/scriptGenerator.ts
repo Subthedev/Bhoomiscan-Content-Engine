@@ -1,26 +1,27 @@
+/**
+ * Hindi voiceover script generator.
+ * Produces conversational Hindi (Devanagari) scripts for property listings.
+ */
+
 import { ListingVideoProps } from "../types";
 import { ContentRichness } from "../analysis/contentAnalyzer";
 import { generateIntelligentScript, ScriptSection } from "./scriptTemplates";
+import { priceToHindiWords, numberToHindi, rateToHindiWords } from "./hindiNumbers";
 
-const CRORE = 10_000_000;
-const LAKH = 100_000;
-
-/** Short price format for voiceover (no symbol — spoken as words) */
+/** Price → full Hindi words: 780000 → "सात लाख अस्सी हज़ार रुपये" */
 function priceForSpeech(price: number): string {
-  if (price >= CRORE) return `${(price / CRORE).toFixed(1)} crore taka`;
-  if (price >= LAKH) return `${(price / LAKH).toFixed(1)} lakh taka`;
-  return `${Math.round(price / 1000)} hajar taka`;
+  return priceToHindiWords(price);
 }
 
 function areaForSpeech(size: number, unit: string): string {
   if (unit === "sq.ft" && size >= 43560) {
-    return `${(size / 43560).toFixed(1)} acre`;
+    return `${(size / 43560).toFixed(1)} एकड़`;
   }
-  return `${size.toLocaleString("en-IN")} ${unit}`;
+  return `${numberToHindi(size)} ${unit}`;
 }
 
 /**
- * Generate a concise Odia voiceover script (max ~480 chars).
+ * Generate a concise Hindi voiceover script.
  * This is the legacy single-string version, kept for backward compat.
  */
 export function generateScript(props: ListingVideoProps): string {
@@ -28,49 +29,49 @@ export function generateScript(props: ListingVideoProps): string {
 
   // 1. Hook
   parts.push(
-    `${props.area} re ${props.plotType.toLowerCase()} plot ${priceForSpeech(props.price)} re bikri achhi.`
+    `${props.area} में ${props.plotType.toLowerCase()} प्लॉट ${priceForSpeech(props.price)} में उपलब्ध है।`
   );
 
   // 2. Property details
   const details: string[] = [];
-  details.push(`Plot size ${areaForSpeech(props.plotSize, props.areaUnit)}`);
+  details.push(`प्लॉट का साइज़ ${areaForSpeech(props.plotSize, props.areaUnit)} है`);
 
   const feats: string[] = [];
-  if (props.hasRoadAccess) feats.push("rasta");
-  if (props.hasWaterSupply) feats.push("pani");
-  if (props.hasElectricity) feats.push("bijuli");
-  if (props.hasFencing) feats.push("fencing");
+  if (props.hasRoadAccess) feats.push("सड़क");
+  if (props.hasWaterSupply) feats.push("पानी");
+  if (props.hasElectricity) feats.push("बिजली");
+  if (props.hasFencing) feats.push("फेंसिंग");
   if (feats.length > 0) {
-    details.push(`${feats.join(", ")} achhi`);
+    details.push(`${feats.join(", ")} की सुविधा है`);
   }
-  parts.push(details.join(", ") + ".");
+  parts.push(details.join(", ") + "।");
 
-  // 3. Walkthrough / location context
+  // 3. Context
   if (props.videoUrl) {
-    parts.push(`Dekhantu site visit video. Location bahut bhala.`);
+    parts.push(`साइट विज़िट वीडियो देखिए। बहुत अच्छी लोकेशन है।`);
   } else {
-    parts.push(`${props.city} ra growing area re eha plot achhi.`);
+    parts.push(`${props.city} के तेज़ी से बढ़ते एरिया में ये प्लॉट है।`);
   }
 
-  // 4. Numbers recap
+  // 4. Numbers
   const rateStr = props.pricePerSqft > 0
-    ? ` Per sqft ${Math.round(props.pricePerSqft)} taka.`
+    ? ` प्रति square feet सिर्फ़ ${rateToHindiWords(props.pricePerSqft)}।`
     : "";
-  parts.push(`Price ${priceForSpeech(props.price)}.${rateStr}`);
+  parts.push(`कीमत ${priceForSpeech(props.price)}।${rateStr}`);
 
   // 5. Seller CTA
-  const role = props.sellerType === "Owner" ? "malik" : "broker";
-  parts.push(`${props.sellerName}, ${role} dwara listed. DM karantu.`);
+  const role = props.sellerType === "Owner" ? "मालिक" : "एजेंट";
+  parts.push(`${props.sellerName} जी, ${role} द्वारा लिस्ट किया गया। DM करें।`);
 
   // 6. Branding
-  parts.push(`bhoomiscan.in re free listing karantu.`);
+  parts.push(`bhoomiscan.in पर फ़्री लिस्टिंग करें।`);
 
   let script = parts.join(" ");
 
-  // Safety: truncate to 495 chars at last sentence boundary
-  if (script.length > 495) {
-    script = script.substring(0, 495);
-    const lastDot = script.lastIndexOf(".");
+  // Safety: truncate at sentence boundary
+  if (script.length > 600) {
+    script = script.substring(0, 600);
+    const lastDot = script.lastIndexOf("।");
     if (lastDot > 200) {
       script = script.substring(0, lastDot + 1);
     }
@@ -80,8 +81,7 @@ export function generateScript(props: ListingVideoProps): string {
 }
 
 /**
- * Generate a timed script using intelligent templates.
- * Returns ScriptSection[] with per-section timing estimates.
+ * Generate a timed script using intelligent Hindi templates.
  */
 export function generateTimedScript(
   props: ListingVideoProps,
@@ -89,9 +89,8 @@ export function generateTimedScript(
 ): ScriptSection[] {
   const sections = generateIntelligentScript(props, richness);
   if (sections.length === 0) {
-    // Fallback to legacy script as a single section
     const text = generateScript(props);
-    return [{ sectionId: "full", text, estimatedDurationMs: Math.round((text.length / 10) * 1000) }];
+    return [{ sectionId: "full", text, estimatedDurationMs: Math.round((text.length / 8) * 1000) }];
   }
   return sections;
 }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { GeoData } from "./geo/types";
 
 export type VideoVariant = "spotlight" | "area-context" | "availability";
 export type PlotType = "Residential" | "Commercial" | "Agricultural" | "Industrial";
@@ -46,6 +47,7 @@ export interface ListingVideoProps {
   videoStartFrom?: number;
   sectionTimings?: {
     introHook: { from: number; duration: number };
+    mapSequence?: { from: number; duration: number };
     photoShowcase: { from: number; duration: number };
     videoWalkthrough: { from: number; duration: number };
     detailsCard: { from: number; duration: number };
@@ -53,6 +55,10 @@ export interface ListingVideoProps {
     endCard: { from: number; duration: number };
   };
   totalFrames?: number;
+  // Geo: seller-provided data for accurate map placement
+  pincode?: string;
+  // Geo data for cinematic map animations (populated by geoExtractor)
+  geoData?: GeoData;
 }
 
 export const ListingVideoPropsSchema = z.object({
@@ -91,6 +97,7 @@ export const ListingVideoPropsSchema = z.object({
   videoStartFrom: z.number().optional(),
   sectionTimings: z.object({
     introHook: z.object({ from: z.number(), duration: z.number() }),
+    mapSequence: z.object({ from: z.number(), duration: z.number() }).optional(),
     photoShowcase: z.object({ from: z.number(), duration: z.number() }),
     videoWalkthrough: z.object({ from: z.number(), duration: z.number() }),
     detailsCard: z.object({ from: z.number(), duration: z.number() }),
@@ -98,6 +105,8 @@ export const ListingVideoPropsSchema = z.object({
     endCard: z.object({ from: z.number(), duration: z.number() }),
   }).optional(),
   totalFrames: z.number().optional(),
+  pincode: z.string().optional(),
+  geoData: z.any().optional(),
 });
 
 /**
@@ -150,6 +159,7 @@ export function mapPropertyToVideoProps(
       : ["https://placehold.co/1080x1920/1a3a27/d4a43a?text=BhoomiScan"],
     videoUrl: property.video_url || undefined,
     videoUrl2: property.video_url_2 || undefined,
+    pincode: property.pincode || undefined,
     hasRoadAccess: !!features.roadAccess,
     hasWaterSupply: !!features.waterSupply,
     hasElectricity: !!features.electricity,

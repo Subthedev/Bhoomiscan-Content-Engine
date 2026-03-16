@@ -9,6 +9,7 @@ import { BottomTicker } from "./components/BottomTicker";
 import { Watermark } from "./components/Watermark";
 import { SectionTransition } from "./components/SectionTransition";
 import { IntroHook } from "./sections/IntroHook";
+import { MapSequence } from "./sections/MapSequence";
 import { PhotoShowcase } from "./sections/PhotoShowcase";
 import { VideoWalkthrough } from "./sections/VideoWalkthrough";
 import { DetailsCard } from "./sections/DetailsCard";
@@ -20,6 +21,8 @@ const FADE_FRAMES = 8;
 export const ListingVideo: React.FC<ListingVideoProps> = (props) => {
   // Use dynamic timings if available, fall back to static SECTIONS
   const t = props.sectionTimings || SECTIONS;
+  // MapSequence timing is only present in dynamic timings (not in static SECTIONS)
+  const mapTiming = props.sectionTimings?.mapSequence;
 
   return (
     <AbsoluteFill style={{ backgroundColor: COLORS.forest }}>
@@ -42,7 +45,23 @@ export const ListingVideo: React.FC<ListingVideoProps> = (props) => {
         </SectionTransition>
       </Sequence>
 
-      {/* 2. Photo Showcase */}
+      {/* 2. Map Sequence (cinematic satellite zoom — only if geo data available) */}
+      {props.geoData && mapTiming && mapTiming.duration > 0 && (
+        <Sequence
+          from={mapTiming.from}
+          durationInFrames={mapTiming.duration + FADE_FRAMES}
+        >
+          <SectionTransition
+            durationInFrames={mapTiming.duration + FADE_FRAMES}
+            enterTransition={SECTION_TRANSITIONS.mapSequence?.enter || "zoom"}
+            exitTransition={SECTION_TRANSITIONS.mapSequence?.exit || "fade"}
+          >
+            <MapSequence {...props} />
+          </SectionTransition>
+        </Sequence>
+      )}
+
+      {/* 3. Photo Showcase */}
       <Sequence
         from={t.photoShowcase.from}
         durationInFrames={t.photoShowcase.duration + FADE_FRAMES}

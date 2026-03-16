@@ -84,7 +84,7 @@ export const SellerCTA: React.FC<ListingVideoProps> = (props) => {
           alignItems: "center",
           justifyContent: "center",
           padding: `${SAFE.PADDING_SOLID.top}px 50px ${SAFE.PADDING_SOLID.bottom}px 50px`,
-          gap: 30,
+          gap: 22,
         }}
       >
       {/* Listed by label */}
@@ -92,7 +92,7 @@ export const SellerCTA: React.FC<ListingVideoProps> = (props) => {
         <span
           style={{
             fontFamily: FONTS.body,
-            fontSize: 18,
+            fontSize: 16,
             fontWeight: 600,
             color: COLORS.goldLight,
             textTransform: "uppercase",
@@ -109,16 +109,16 @@ export const SellerCTA: React.FC<ListingVideoProps> = (props) => {
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          gap: 14,
+          gap: 10,
           opacity: avatarProgress,
           transform: `scale(${avatarProgress})`,
         }}
       >
         <div
           style={{
-            width: 90,
-            height: 90,
-            borderRadius: 45,
+            width: 80,
+            height: 80,
+            borderRadius: 40,
             background: GRADIENTS.gold,
             display: "flex",
             alignItems: "center",
@@ -129,7 +129,7 @@ export const SellerCTA: React.FC<ListingVideoProps> = (props) => {
           <span
             style={{
               fontFamily: FONTS.body,
-              fontSize: 40,
+              fontSize: 36,
               fontWeight: 700,
               color: COLORS.forest,
             }}
@@ -141,12 +141,12 @@ export const SellerCTA: React.FC<ListingVideoProps> = (props) => {
         <span
           style={{
             fontFamily: FONTS.display,
-            fontSize: fitText(props.sellerName, 20, 40, 28).fontSize,
+            fontSize: fitText(props.sellerName, 20, 36, 26).fontSize,
             fontWeight: 700,
             color: COLORS.white,
           }}
         >
-          {fitText(props.sellerName, 20, 40, 28).text}
+          {fitText(props.sellerName, 20, 36, 26).text}
         </span>
 
         {/* Seller type badge */}
@@ -155,13 +155,13 @@ export const SellerCTA: React.FC<ListingVideoProps> = (props) => {
             backgroundColor:
               props.sellerType === "Owner" ? COLORS.emerald : COLORS.gold,
             borderRadius: 999,
-            padding: "6px 20px",
+            padding: "5px 18px",
           }}
         >
           <span
             style={{
               fontFamily: FONTS.body,
-              fontSize: 18,
+              fontSize: 16,
               fontWeight: 700,
               color: props.sellerType === "Owner" ? COLORS.white : COLORS.forest,
               textTransform: "uppercase",
@@ -177,14 +177,14 @@ export const SellerCTA: React.FC<ListingVideoProps> = (props) => {
       <div
         style={{
           opacity: textProgress,
-          transform: `translateY(${(1 - textProgress) * 20}px)`,
+          transform: `translateY(${(1 - textProgress) * 16}px)`,
           textAlign: "center",
         }}
       >
         <span
           style={{
             fontFamily: FONTS.display,
-            fontSize: 52,
+            fontSize: 46,
             fontWeight: 700,
             color: COLORS.gold,
             textShadow: "0 2px 8px rgba(0,0,0,0.2)",
@@ -198,26 +198,26 @@ export const SellerCTA: React.FC<ListingVideoProps> = (props) => {
       <div
         style={{
           opacity: ctaProgress,
-          transform: `translateY(${(1 - ctaProgress) * 20}px) scale(${ctaScale})`,
+          transform: `translateY(${(1 - ctaProgress) * 16}px) scale(${ctaScale})`,
           textAlign: "center",
           display: "flex",
           flexDirection: "column",
-          gap: 12,
+          gap: 10,
           alignItems: "center",
         }}
       >
         <div
           style={{
             backgroundColor: COLORS.gold,
-            borderRadius: 14,
-            padding: "14px 36px",
+            borderRadius: 12,
+            padding: "12px 32px",
             boxShadow: "0 4px 16px rgba(212, 164, 58, 0.4)",
           }}
         >
           <span
             style={{
               fontFamily: FONTS.body,
-              fontSize: 26,
+              fontSize: 22,
               fontWeight: 800,
               color: COLORS.forest,
             }}
@@ -231,14 +231,14 @@ export const SellerCTA: React.FC<ListingVideoProps> = (props) => {
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
-            gap: 6,
-            marginTop: 4,
+            gap: 4,
+            marginTop: 2,
           }}
         >
           <span
             style={{
               fontFamily: FONTS.body,
-              fontSize: 18,
+              fontSize: 16,
               fontWeight: 600,
               color: COLORS.white,
             }}
@@ -248,12 +248,12 @@ export const SellerCTA: React.FC<ListingVideoProps> = (props) => {
           <span
             style={{
               fontFamily: FONTS.body,
-              fontSize: 16,
+              fontSize: 14,
               fontWeight: 600,
               color: COLORS.emerald,
             }}
           >
-            ✓ No spam calls  •  ✓ No brokers  •  ✓ Verified seller only
+            No spam calls  •  No brokers  •  Verified seller only
           </span>
         </div>
       </div>

@@ -134,26 +134,26 @@ export const IntroHook: React.FC<ListingVideoProps> = (props) => {
           right: SAFE.CONTENT_RIGHT,
           display: "flex",
           flexDirection: "column",
-          gap: 16,
+          gap: 10,
         }}
       >
         {/* Property type pill */}
         <div
           style={{
             opacity: infoProgress,
-            transform: `translateY(${(1 - infoProgress) * 20}px)`,
+            transform: `translateY(${(1 - infoProgress) * 16}px)`,
           }}
         >
           <span
             style={{
               display: "inline-block",
               fontFamily: FONTS.body,
-              fontSize: 18,
+              fontSize: 16,
               fontWeight: 700,
               color: COLORS.white,
-              backgroundColor: "rgba(16, 185, 129, 0.8)",
+              backgroundColor: "rgba(16, 185, 129, 0.85)",
               borderRadius: 6,
-              padding: "6px 14px",
+              padding: "5px 14px",
               textTransform: "uppercase",
               letterSpacing: 1.5,
             }}
@@ -166,13 +166,13 @@ export const IntroHook: React.FC<ListingVideoProps> = (props) => {
         <div
           style={{
             opacity: priceProgress,
-            transform: `translateY(${(1 - priceProgress) * 30}px)`,
+            transform: `translateY(${(1 - priceProgress) * 24}px)`,
           }}
         >
           <span
             style={{
               fontFamily: FONTS.display,
-              fontSize: 76,
+              fontSize: 62,
               fontWeight: 700,
               color: COLORS.white,
               textShadow: "0 3px 12px rgba(0,0,0,0.5)",
@@ -187,16 +187,16 @@ export const IntroHook: React.FC<ListingVideoProps> = (props) => {
         <div
           style={{
             opacity: infoProgress,
-            transform: `translateY(${(1 - infoProgress) * 20}px)`,
+            transform: `translateY(${(1 - infoProgress) * 16}px)`,
             display: "flex",
             flexDirection: "column",
-            gap: 6,
+            gap: 5,
           }}
         >
           <span
             style={{
               fontFamily: FONTS.body,
-              fontSize: 30,
+              fontSize: 26,
               fontWeight: 600,
               color: COLORS.white,
               textShadow: "0 1px 6px rgba(0,0,0,0.4)",
@@ -207,7 +207,7 @@ export const IntroHook: React.FC<ListingVideoProps> = (props) => {
           <span
             style={{
               fontFamily: FONTS.body,
-              fontSize: 26,
+              fontSize: 22,
               fontWeight: 500,
               color: COLORS.goldLight,
               textShadow: "0 1px 4px rgba(0,0,0,0.4)",
@@ -218,11 +218,11 @@ export const IntroHook: React.FC<ListingVideoProps> = (props) => {
           <span
             style={{
               fontFamily: FONTS.body,
-              fontSize: 22,
+              fontSize: 19,
               fontWeight: 600,
               color: COLORS.emerald,
               textShadow: "0 1px 4px rgba(0,0,0,0.4)",
-              marginTop: 4,
+              marginTop: 2,
             }}
           >
             {props.sellerType === "Owner"

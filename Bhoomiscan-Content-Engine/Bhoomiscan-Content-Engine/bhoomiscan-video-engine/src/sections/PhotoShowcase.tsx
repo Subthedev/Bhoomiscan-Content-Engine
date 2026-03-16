@@ -233,10 +233,10 @@ export const PhotoShowcase: React.FC<ListingVideoProps> = (props) => {
         <div
           style={{
             fontFamily: FONTS.display,
-            fontSize: 42,
+            fontSize: 36,
             fontWeight: 700,
             color: COLORS.white,
-            lineHeight: 1.3,
+            lineHeight: 1.25,
             textShadow: "0 2px 10px rgba(0,0,0,0.5)",
           }}
         >
@@ -246,10 +246,10 @@ export const PhotoShowcase: React.FC<ListingVideoProps> = (props) => {
           <div
             style={{
               fontFamily: FONTS.body,
-              fontSize: 24,
+              fontSize: 21,
               fontWeight: 500,
               color: COLORS.goldLight,
-              marginTop: 8,
+              marginTop: 6,
               textShadow: "0 1px 6px rgba(0,0,0,0.4)",
             }}
           >

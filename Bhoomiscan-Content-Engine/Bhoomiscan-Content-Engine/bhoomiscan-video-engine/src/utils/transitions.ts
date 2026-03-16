@@ -96,6 +96,7 @@ export function computeTransitionProgress(
 /** Transition presets for each section */
 export const SECTION_TRANSITIONS: Record<string, { enter: TransitionType; exit: TransitionType }> = {
   introHook: { enter: "zoom", exit: "fade" },
+  mapSequence: { enter: "zoom", exit: "fade" },
   photoShowcase: { enter: "slideLeft", exit: "fade" },
   videoWalkthrough: { enter: "wipe", exit: "blur" },
   detailsCard: { enter: "slideUp", exit: "fade" },

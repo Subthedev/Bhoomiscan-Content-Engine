@@ -1,5 +1,6 @@
 import { Composition } from "remotion";
 import { ListingVideo } from "./ListingVideo";
+import { MapTest } from "./sections/MapTest";
 import { sampleProperty, sampleMinimal } from "./fixtures/sampleProperty";
 import { FPS, TOTAL_FRAMES } from "./utils/timing";
 import { VIDEO } from "./utils/theme";
@@ -33,6 +34,15 @@ export const RemotionRoot: React.FC = () => {
         calculateMetadata={({ props }: { props: ListingVideoProps }) => ({
           durationInFrames: props.totalFrames || TOTAL_FRAMES,
         })}
+      />
+      {/* Phase 0: Map rendering validation */}
+      <Composition
+        id="MapTest"
+        component={MapTest}
+        durationInFrames={90}
+        fps={FPS}
+        width={VIDEO.width}
+        height={VIDEO.height}
       />
     </>
   );

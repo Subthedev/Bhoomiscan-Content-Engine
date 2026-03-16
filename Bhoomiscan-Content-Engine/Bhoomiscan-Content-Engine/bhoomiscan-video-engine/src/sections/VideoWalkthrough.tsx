@@ -137,9 +137,9 @@ export const VideoWalkthrough: React.FC<ListingVideoProps> = (props) => {
       <div
         style={{
           position: "absolute",
-          bottom: 140,
-          left: 40,
-          right: 40,
+          bottom: SAFE.CONTENT_BOTTOM,
+          left: SAFE.CONTENT_LEFT,
+          right: SAFE.CONTENT_RIGHT,
           opacity: labelProgress,
           display: "flex",
           flexDirection: "column",

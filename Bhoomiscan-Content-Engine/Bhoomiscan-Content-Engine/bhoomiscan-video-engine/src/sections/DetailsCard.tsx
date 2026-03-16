@@ -55,27 +55,27 @@ export const DetailsCard: React.FC<ListingVideoProps> = (props) => {
         display: "flex",
         flexDirection: "column",
         padding: `${SAFE.PADDING_SOLID.top}px ${SAFE.PADDING_SOLID.horizontal}px ${SAFE.PADDING_SOLID.bottom}px ${SAFE.PADDING_SOLID.horizontal}px`,
-        gap: 24,
+        gap: 20,
       }}
     >
       {/* Header */}
       <div
         style={{
           opacity: headerProgress,
-          transform: `translateY(${(1 - headerProgress) * 20}px)`,
+          transform: `translateY(${(1 - headerProgress) * 16}px)`,
           textAlign: "center",
-          marginBottom: 8,
+          marginBottom: 4,
         }}
       >
         <div
           style={{
             fontFamily: FONTS.body,
-            fontSize: 18,
+            fontSize: 16,
             fontWeight: 700,
             color: COLORS.gold,
             textTransform: "uppercase",
             letterSpacing: 4,
-            marginBottom: 10,
+            marginBottom: 8,
           }}
         >
           Why This Plot?
@@ -83,10 +83,10 @@ export const DetailsCard: React.FC<ListingVideoProps> = (props) => {
         <div
           style={{
             fontFamily: FONTS.display,
-            fontSize: 36,
+            fontSize: 32,
             fontWeight: 700,
             color: COLORS.white,
-            lineHeight: 1.3,
+            lineHeight: 1.25,
           }}
         >
           {props.area}, {props.city}
@@ -122,7 +122,7 @@ export const DetailsCard: React.FC<ListingVideoProps> = (props) => {
         style={{
           display: "flex",
           flexWrap: "wrap",
-          gap: 16,
+          gap: 12,
           justifyContent: "center",
           flex: 1,
           alignContent: "center",
@@ -156,20 +156,20 @@ export const DetailsCard: React.FC<ListingVideoProps> = (props) => {
                 opacity: progress,
                 transform: `translateX(${(1 - progress) * slideX}px) scale(${scaleVal})`,
                 backgroundColor: "rgba(255, 255, 255, 0.06)",
-                borderRadius: 16,
-                padding: "18px 20px",
+                borderRadius: 14,
+                padding: "14px 16px",
                 borderLeft: `3px solid ${COLORS.gold}`,
                 display: "flex",
                 alignItems: "center",
-                gap: 14,
+                gap: 12,
               }}
             >
-              <span style={{ fontSize: 30 }}>{feat.icon}</span>
-              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <span style={{ fontSize: 26 }}>{feat.icon}</span>
+              <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
                 <span
                   style={{
                     fontFamily: FONTS.body,
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: 600,
                     color: COLORS.goldLight,
                     textTransform: "uppercase",
@@ -181,12 +181,15 @@ export const DetailsCard: React.FC<ListingVideoProps> = (props) => {
                 <span
                   style={{
                     fontFamily: FONTS.body,
-                    fontSize: 24,
+                    fontSize: 21,
                     fontWeight: 700,
                     color: COLORS.white,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
                   }}
                 >
-                  {truncate(displayValue, 12)}
+                  {truncate(displayValue, 14)}
                 </span>
               </div>
             </div>

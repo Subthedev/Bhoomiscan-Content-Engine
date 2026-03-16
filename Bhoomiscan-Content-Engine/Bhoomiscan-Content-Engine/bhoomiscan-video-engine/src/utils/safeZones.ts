@@ -6,7 +6,7 @@ export const SAFE = {
   /** Content must start below this Y to clear TopTicker */
   CONTENT_TOP: 155,
   /** Content must end above (viewport height - this) to clear BottomTicker */
-  CONTENT_BOTTOM: 205,
+  CONTENT_BOTTOM: 230,
   /** Top-right badges (FOR SALE, photo counter) */
   BADGE_TOP: 155,
   BADGE_RIGHT: 24,
